@@ -26,6 +26,9 @@ defmodule Uniops.Storage.Cell do
     end
   end
 
+  @doc false
+  def __ensure_table__(db), do: ensure_table(db)
+
   defp ensure_table(db) do
     tab = table_name(db)
 
