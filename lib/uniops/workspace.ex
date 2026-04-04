@@ -51,8 +51,8 @@ defmodule Uniops.Workspace do
           args: ["--codebase-create", codebase_path]
         ])
 
-      send(port, {self(), {:command, "project.create uniops_base\nexit\n"}})
-      collect_init_output(port, "", 60_000)
+      send(port, {self(), {:command, "project.create uniops_base\nlib.install @unison/http\nexit\n"}})
+      collect_init_output(port, "", 120_000)
     end
   end
 
