@@ -14,7 +14,7 @@ defmodule Uniops.MixProject do
 
   def application do
     [
-      extra_applications: [:logger],
+      extra_applications: [:logger, :mnesia],
       mod: {Uniops.Application, []}
     ]
   end
@@ -22,6 +22,10 @@ defmodule Uniops.MixProject do
   defp elixirc_paths(_env), do: ["lib"]
 
   defp deps do
-    []
+    [
+      {:plug, "~> 1.16"},
+      {:bandit, "~> 1.6"},
+      {:jason, "~> 1.4"}
+    ]
   end
 end
