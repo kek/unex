@@ -12,9 +12,11 @@ defmodule Uniops.Workspace do
   """
   def create(path) do
     File.mkdir_p!(path)
-    %__MODULE__{path: path}
-    |> tap(fn _ -> init_codebase(path) end)
-    |> then(&{:ok, &1})
+
+    case init_codebase(path) do
+      :ok -> {:ok, %__MODULE__{path: path}}
+      {:error, _} = err -> err
+    end
   end
 
   @doc """
@@ -38,7 +40,9 @@ defmodule Uniops.Workspace do
     {:ok, ucm} = Uniops.UCM.find()
     codebase_path = Path.join(path, ".unison")
 
-    unless File.dir?(codebase_path) do
+    if File.dir?(codebase_path) do
+      :ok
+    else
       port =
         Port.open({:spawn_executable, ucm}, [
           :binary,
@@ -48,21 +52,24 @@ defmodule Uniops.Workspace do
         ])
 
       send(port, {self(), {:command, "project.create uniops_base\nexit\n"}})
-      collect_init_output(port, 60_000)
+      collect_init_output(port, "", 60_000)
     end
   end
 
-  defp collect_init_output(port, timeout) do
+  defp collect_init_output(port, acc, timeout) do
     receive do
-      {^port, {:data, _data}} ->
-        collect_init_output(port, timeout)
+      {^port, {:data, data}} ->
+        collect_init_output(port, acc <> data, timeout)
 
-      {^port, {:exit_status, _code}} ->
+      {^port, {:exit_status, 0}} ->
         :ok
+
+      {^port, {:exit_status, code}} ->
+        {:error, {:init_failed, code, acc}}
     after
       timeout ->
         Port.close(port)
-        :ok
+        {:error, {:timeout, acc}}
     end
   end
 end

@@ -10,7 +10,7 @@ defmodule Uniops.Runner do
     @type t :: %__MODULE__{
             stdout: String.t(),
             stderr: String.t(),
-            exit_code: non_neg_integer()
+            exit_code: integer()
           }
   end
 
@@ -71,7 +71,7 @@ defmodule Uniops.Runner do
         collect_output(port, acc <> data, timeout)
 
       {^port, {:exit_status, 0}} ->
-        if ucm_error?(acc) do
+        if Uniops.UCM.Output.error?(acc) do
           {:error, %Result{stdout: acc, stderr: "", exit_code: 1}}
         else
           {:ok, %Result{stdout: acc, stderr: "", exit_code: 0}}
@@ -84,22 +84,6 @@ defmodule Uniops.Runner do
         Port.close(port)
         {:error, %Result{stdout: acc, stderr: "timeout after #{timeout}ms", exit_code: -1}}
     end
-  end
-
-  # UCM exits 0 even on typecheck/lookup failures.
-  # Detect failure from output content.
-  defp ucm_error?(output) do
-    stripped = strip_ansi(output)
-
-    String.contains?(stripped, "I found a value  of type:") or
-      String.contains?(stripped, "I couldn't resolve any of") or
-      String.contains?(stripped, "couldn't find one") or
-      String.contains?(stripped, "parse error") or
-      String.contains?(stripped, "Type error")
-  end
-
-  defp strip_ansi(text) do
-    Regex.replace(~r/\e\[[0-9;]*m/, text, "")
   end
 
   defp codebase_args(nil), do: []

@@ -42,7 +42,7 @@ defmodule Uniops.Compiler do
     uc_file = uc_output_path <> ".uc"
 
     cond do
-      compile_error?(output) ->
+      Uniops.UCM.Output.error?(output) ->
         {:error, output}
 
       File.exists?(uc_file) ->
@@ -67,18 +67,4 @@ defmodule Uniops.Compiler do
     end
   end
 
-  defp compile_error?(output) do
-    stripped = strip_ansi(output)
-
-    String.contains?(stripped, "I found a value  of type:") or
-      String.contains?(stripped, "I couldn't resolve any of") or
-      String.contains?(stripped, "couldn't find one") or
-      String.contains?(stripped, "parse error") or
-      String.contains?(stripped, "Type error") or
-      String.contains?(stripped, "There's nothing for me to add")
-  end
-
-  defp strip_ansi(text) do
-    Regex.replace(~r/\e\[[0-9;]*m/, text, "")
-  end
 end

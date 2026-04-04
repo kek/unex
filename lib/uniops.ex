@@ -44,13 +44,18 @@ defmodule Uniops do
   end
 
   defp with_workspace(fun) do
-    dir = Path.join(workspace_base(), "ws_#{:rand.uniform(1_000_000_000)}")
-    {:ok, workspace} = Uniops.Workspace.create(dir)
+    dir = Path.join(workspace_base(), "ws_#{System.unique_integer([:positive])}")
 
-    try do
-      fun.(workspace)
-    after
-      Uniops.Workspace.destroy(workspace)
+    case Uniops.Workspace.create(dir) do
+      {:ok, workspace} ->
+        try do
+          fun.(workspace)
+        after
+          Uniops.Workspace.destroy(workspace)
+        end
+
+      {:error, _} = err ->
+        err
     end
   end
 
