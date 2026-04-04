@@ -39,10 +39,30 @@ defmodule Uniops.Workspace do
     codebase_path = Path.join(path, ".unison")
 
     unless File.dir?(codebase_path) do
-      System.cmd(ucm, ["--codebase-create", codebase_path, "--exit"],
-        cd: path,
-        stderr_to_stdout: true
-      )
+      port =
+        Port.open({:spawn_executable, ucm}, [
+          :binary,
+          :exit_status,
+          :stderr_to_stdout,
+          args: ["--codebase-create", codebase_path]
+        ])
+
+      send(port, {self(), {:command, "project.create uniops_base\nexit\n"}})
+      collect_init_output(port, 60_000)
+    end
+  end
+
+  defp collect_init_output(port, timeout) do
+    receive do
+      {^port, {:data, _data}} ->
+        collect_init_output(port, timeout)
+
+      {^port, {:exit_status, _code}} ->
+        :ok
+    after
+      timeout ->
+        Port.close(port)
+        :ok
     end
   end
 end
