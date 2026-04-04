@@ -34,4 +34,20 @@ defmodule Uniops.RunnerTest do
       assert result.exit_code != 0
     end
   end
+
+  describe "run_compiled/2" do
+    test "executes a .uc bytecode file and captures stdout", %{workspace: ws} do
+      source = """
+      myMain : '{IO, Exception} ()
+      myMain = do printLine "compiled hello"
+      """
+
+      {:ok, file_path} = Uniops.Workspace.write_source(ws, "compiled_test.u", source)
+      {:ok, uc_path} = Uniops.Compiler.compile(ws, file_path, "myMain", "compiled_test")
+
+      assert {:ok, result} = Uniops.Runner.run_compiled(uc_path)
+      assert result.stdout =~ "compiled hello"
+      assert result.exit_code == 0
+    end
+  end
 end
