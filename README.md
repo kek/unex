@@ -164,7 +164,7 @@ Uniops nodes use BEAM's built-in distribution to form clusters. Each node runs i
 ```bash
 UNIOPS_API_PORT=4040 \
 UNIOPS_MNESIA_DIR=/tmp/uniops_a \
-elixir --sname a --cookie uniops_secret -S mix run --no-halt
+iex --sname a --cookie uniops_secret -S mix
 ```
 
 **Terminal 2 — start node `b` and connect to `a`:**
@@ -172,23 +172,16 @@ elixir --sname a --cookie uniops_secret -S mix run --no-halt
 ```bash
 UNIOPS_API_PORT=4041 \
 UNIOPS_MNESIA_DIR=/tmp/uniops_b \
-elixir --sname b --cookie uniops_secret -S mix run --no-halt \
-  --eval 'Node.connect(:"a@$(hostname -s |> String.trim)")'
-```
-
-Or connect interactively via IEx:
-
-```bash
-UNIOPS_API_PORT=4041 \
-UNIOPS_MNESIA_DIR=/tmp/uniops_b \
 iex --sname b --cookie uniops_secret -S mix
 ```
 
+Then connect from node `b`:
+
 ```elixir
-iex(b)> Node.connect(:"a@yourhostname")
-true
+Node.connect(:"a@#{node() |> Atom.to_string() |> String.split("@") |> List.last()}")
+# true
 iex(b)> Node.list()
-[:"a@yourhostname"]
+# => [:"a@Q0H6M77WWM"]  (your hostname will differ)
 ```
 
 Key points:
@@ -204,13 +197,14 @@ From an IEx session on any node:
 ```elixir
 # Check connected peers
 Node.list()
-# => [:"a@yourhostname"]
+# => [:"a@Q0H6M77WWM"]
 
 # Cache some bytecode on this node
 hash = Uniops.Cluster.HashCache.put("test data")
 
 # Verify a peer can resolve it (pulls from us via SyncServer)
-:rpc.call(:"a@yourhostname", Uniops.Cluster.SyncServer, :resolve, [Uniops.Cluster.SyncServer, [hash]])
+[peer | _] = Node.list()
+:rpc.call(peer, Uniops.Cluster.SyncServer, :resolve, [Uniops.Cluster.SyncServer, [hash]])
 # => {:ok, %{"abc123..." => "test data"}}
 ```
 
@@ -227,7 +221,8 @@ source = ~s(main : '{IO, Exception} ()\nmain = do printLine "hello from remote!"
 hash = Uniops.Cluster.HashCache.put(File.read!(uc_path))
 
 # Execute on node b — bytecode syncs automatically
-{:ok, result} = Uniops.Remote.execute(hash, node: :"b@yourhostname")
+[peer | _] = Node.list()
+{:ok, result} = Uniops.Remote.execute(hash, node: peer)
 result.stdout
 # => "hello from remote!\n"
 
