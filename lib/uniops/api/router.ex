@@ -10,6 +10,7 @@ defmodule Uniops.API.Router do
     OrderedTableController,
     CellController,
     TransactionController,
+    ServicesController,
     Json
   }
 
@@ -62,6 +63,24 @@ defmodule Uniops.API.Router do
 
   post "/databases/:db/tx" do
     TransactionController.execute(conn, db)
+  end
+
+  # Services routes
+
+  post "/services/deploy" do
+    ServicesController.deploy(conn)
+  end
+
+  post "/services/:name/call" do
+    ServicesController.call(conn, name)
+  end
+
+  get "/services" do
+    ServicesController.list(conn)
+  end
+
+  delete "/services/:name" do
+    ServicesController.undeploy(conn, name)
   end
 
   match _ do
