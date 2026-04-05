@@ -7,10 +7,10 @@ Open-source ops platform for [Unison](https://www.unison-lang.org/). Provides du
 ```bash
 # Prerequisites: Elixir 1.17+, UCM (Unison Codebase Manager)
 mix deps.get
-mix run --no-halt
+mix uniops.start
 ```
 
-The storage API starts on `http://localhost:4040`. Change the port with `UNIOPS_API_PORT=8080`.
+The API starts on `http://localhost:4040` with zero configuration.
 
 Verify it works:
 
@@ -155,125 +155,61 @@ The `use lib.unison_http_15_2_0` line imports the HTTP library namespace. The ex
 
 ## Running a cluster
 
-Uniops nodes use BEAM's built-in distribution to form clusters. Each node runs its own storage, hash cache, and remote execution service.
+Uniops nodes use BEAM's built-in distribution to form clusters. Set a few environment variables and nodes auto-connect.
 
 ### Starting a two-node cluster
 
-**Terminal 1 — start node `a`:**
+**Terminal 1 — node `a`:**
 
 ```bash
-UNIOPS_API_PORT=4040 \
-UNIOPS_MNESIA_DIR=/tmp/uniops_a \
-iex --sname a --cookie uniops_secret -S mix
+UNIOPS_NODE=a UNIOPS_COOKIE=secret UNIOPS_PORT=4040 UNIOPS_PEERS=b@$(hostname) mix uniops.start
 ```
 
-**Terminal 2 — start node `b` and connect to `a`:**
+**Terminal 2 — node `b`:**
 
 ```bash
-UNIOPS_API_PORT=4041 \
-UNIOPS_MNESIA_DIR=/tmp/uniops_b \
-iex --sname b --cookie uniops_secret -S mix
+UNIOPS_NODE=b UNIOPS_COOKIE=secret UNIOPS_PORT=4041 UNIOPS_PEERS=a@$(hostname) mix uniops.start
 ```
 
-Then connect from node `b`:
+Nodes auto-connect — no manual `Node.connect` needed. Check from IEx:
 
 ```elixir
-Node.connect(:"a@#{node() |> Atom.to_string() |> String.split("@") |> List.last()}")
-# true
-iex(b)> Node.list()
-# => [:"a@Q0H6M77WWM"]  (your hostname will differ)
-```
-
-Key points:
-- `--sname` gives each node a short name (use `--name` for fully qualified names across machines)
-- `--cookie` must match on all nodes in the cluster
-- Each node needs its own `UNIOPS_API_PORT` and `UNIOPS_MNESIA_DIR`
-- UCM must be on PATH on every machine in the cluster
-
-### Validating the cluster
-
-From an IEx session on any node:
-
-```elixir
-# Check connected peers
 Node.list()
-# => [:"a@Q0H6M77WWM"]
-
-# Cache some bytecode on this node
-hash = Uniops.Cluster.HashCache.put("test data")
-
-# Verify a peer can resolve it (pulls from us via SyncServer)
-[peer | _] = Node.list()
-:rpc.call(peer, Uniops.Cluster.SyncServer, :resolve, [Uniops.Cluster.SyncServer, [hash]])
-# => {:ok, %{"abc123..." => "test data"}}
+# => [:"a@myhostname"]
 ```
 
-### Remote execution
+### Using a config file
 
-Compile a Unison program and execute it on a remote node:
-
-```elixir
-# On node a: compile and cache bytecode
-source = "main : '{IO, Exception} ()\nmain = do printLine \"hello from remote!\""
-{:ok, ws} = Uniops.Workspace.create("/tmp/uniops_compile")
-{:ok, path} = Uniops.Workspace.write_source(ws, "prog.u", source)
-{:ok, uc_path} = Uniops.Compiler.compile(ws, path, "main", "prog")
-hash = Uniops.Cluster.HashCache.put(File.read!(uc_path))
-
-# Execute on node b — bytecode syncs automatically
-[peer | _] = Node.list()
-{:ok, result} = Uniops.Remote.execute(hash, node: peer)
-result.stdout
-# => "hello from remote!\n"
-
-# Or let the system pick a node
-{:ok, result} = Uniops.Remote.submit(hash)
-```
-
-The flow: compile locally → cache bytecode by hash → call `execute` with target node → target resolves the hash from peers → writes temp `.uc` file → runs via UCM → returns stdout/stderr.
-
-### Services
-
-Deploy a Unison program as a named service and call it by name from any node:
-
-```elixir
-# Deploy a service (compiles, caches, registers)
-source = "main : '{IO, Exception} ()\nmain = do printLine \"hello service\""
-{:ok, info} = Uniops.Services.deploy("greeter", source)
-# => {:ok, %{name: "greeter", hash: "abc...", node: :a@host, ...}}
-
-# Call it by name
-{:ok, result} = Uniops.Services.call("greeter")
-result.stdout
-# => "hello service\n"
-
-# Call from another node — service is discovered automatically
-# (on node b)
-{:ok, result} = Uniops.Services.call("greeter")
-
-# List all services
-Uniops.Services.list()
-
-# Undeploy
-Uniops.Services.undeploy("greeter")
-```
-
-Services are also available via HTTP:
+For complex setups, use a config file instead of env vars:
 
 ```bash
-# Deploy
-curl -s -X POST localhost:4040/services/deploy \
-  -H 'Content-Type: application/json' \
-  -d '{"name":"greeter","source":"main : '\''{IO, Exception} ()\nmain = do printLine \"hello\""}'
+# Copy the example
+cp config.example.exs mynode.exs
+# Edit it, then start
+UNIOPS_CONFIG=mynode.exs mix uniops.start
+```
 
-# Call
-curl -s -X POST localhost:4040/services/greeter/call
+Config files can also live at `~/.config/uniops/config.exs` or `/etc/uniops/config.exs`.
 
-# List
-curl -s localhost:4040/services
+### Production deployment
 
-# Undeploy
-curl -s -X DELETE localhost:4040/services/greeter
+Build a standalone release:
+
+```bash
+MIX_ENV=prod mix release
+```
+
+Run it:
+
+```bash
+# Single node
+./bin/uniops start
+
+# Cluster node
+UNIOPS_NODE=a UNIOPS_COOKIE=secret UNIOPS_PEERS=b@10.0.1.2 ./bin/uniops start
+
+# Attach console to running node
+./bin/uniops remote
 ```
 
 ## Supporting Abilities
@@ -338,19 +274,24 @@ curl -s localhost:4040/log/recent/20
 
 ## Configuration
 
-| Env var | Default | Description |
-|---------|---------|-------------|
-| `UNIOPS_API_PORT` | `4040` | HTTP API port |
-| `UNIOPS_MNESIA_DIR` | system tmp dir | Where Mnesia stores data on disk |
+Uniops resolves config in this order (first wins): environment variables → config file → built-in defaults.
+
+### Environment variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `UNIOPS_NODE` | *(none)* | Node name. Short name (`a`) for same subnet, FQDN (`a@10.0.1.5`) for cross-network |
+| `UNIOPS_COOKIE` | *(none)* | Cluster auth cookie (required if `UNIOPS_NODE` is set) |
+| `UNIOPS_PORT` | `4040` | HTTP API port |
+| `UNIOPS_DATA` | `./data` | Base directory for Mnesia and blob storage |
+| `UNIOPS_PEERS` | *(none)* | Comma-separated peer nodes to auto-connect |
+| `UNIOPS_CONFIG_KEY` | *(generated)* | AES-256-GCM encryption key for Config secrets |
+| `UNIOPS_CONFIG` | *(none)* | Path to config file |
 | `UCM_PATH` | `ucm` | Path to UCM binary |
 
-BEAM distribution flags (passed to `elixir`/`iex`):
+### Config file
 
-| Flag | Example | Description |
-|------|---------|-------------|
-| `--sname` | `--sname a` | Short node name (same subnet) |
-| `--name` | `--name a@10.0.1.5` | Full node name (cross-network) |
-| `--cookie` | `--cookie secret` | Cluster auth token (must match) |
+See `config.example.exs` for a complete reference. Place at `~/.config/uniops/config.exs`, `/etc/uniops/config.exs`, or point to it with `UNIOPS_CONFIG`.
 
 ## Architecture
 
