@@ -63,95 +63,100 @@ curl -s -X POST localhost:4040/databases/mydb/tx \
 
 ## Using from Unison
 
-This is the point of the whole project. Your Unison programs talk to uniops over HTTP using the `@unison/http` library.
+Uniops provides a Unison ability library so your programs use idiomatic `handle ... with` patterns instead of raw HTTP calls.
 
 ### Setup
 
-In UCM, install the HTTP library:
+1. In UCM, install the HTTP library:
 
 ```
 myProject/main> lib.install @unison/http
 ```
 
-### Example: write and read from storage
+2. Copy the `unison/` directory from this repo into your Unison project, or add the files individually.
+
+3. Check the `use lib.unison_http_15_2_0` import in each file — the version suffix must match your installed `@unison/http` version. Check with `ls lib` in UCM.
+
+### Example: Storage with abilities
 
 ```unison
-use lib.unison_http_15_2_0
-use lib.base.IO
+myApp : '{UStorage, IO, Exception} ()
+myApp = do
+  UStorage.createDatabase "mydb"
+  UStorage.createTable "mydb" "users"
+  UStorage.write "mydb" "users" "alice" "{\"role\":\"admin\"}"
 
--- Helper: POST JSON to a URL
-postJson : Text -> Text -> {IO, Exception, Http, Threads} HttpResponse
-postJson url body =
-  req =
-    HttpRequest.addHeader "Content-Type" "application/json"
-      (HttpRequest.post (URI.parse url) (Body.fromText body))
-  Http.request req
-
--- Helper: GET a URL and return body as Text
-getJson : Text -> {IO, Exception, Http, Threads} Text
-getJson url = bodyText (Http.get (URI.parse url))
+  match UStorage.read "mydb" "users" "alice" with
+    Some val -> printLine ("Got: " ++ val)
+    None -> printLine "Not found"
 
 main : '{IO, Exception} ()
-main = do
-  base = "http://localhost:4040"
-
-  Threads.run do Http.run do
-    -- Create a database
-    _ = postJson (base ++ "/databases") "{\"name\":\"mydb\"}"
-
-    -- Create a table
-    _ = postJson (base ++ "/databases/mydb/tables/items") ""
-
-    -- Write some data
-    _ = postJson
-          (base ++ "/databases/mydb/tables/items/write")
-          "{\"key\":\"hello\",\"value\":\"world\"}"
-
-    -- Read it back
-    body = getJson (base ++ "/databases/mydb/tables/items/read/hello")
-    printLine ("Got: " ++ body)
+main = Uniops.main "http://localhost:4040" myApp
 ```
 
-Run it (with uniops server running in another terminal):
+Run it (with uniops server running):
 
 ```
 myProject/main> run main
-Got: {"key":"hello","value":"world"}
+Got: {"role":"admin"}
 ```
 
-### Example: using cells as counters
+### Example: Config and Scratch
 
 ```unison
-use lib.unison_http_15_2_0
-use lib.base.IO
+myApp : '{UConfig, UScratch, IO, Exception} ()
+myApp = do
+  UConfig.set "prod" "api_key" "sk-secret-123"
 
-main : '{IO, Exception} ()
-main = do
-  base = "http://localhost:4040"
+  match UConfig.get "prod" "api_key" with
+    Some key -> printLine ("Key: " ++ key)
+    None -> printLine "No key"
 
-  Threads.run do Http.run do
-    -- Write a cell
-    req =
-      HttpRequest.addHeader "Content-Type" "application/json"
-        (HttpRequest.post
-          (URI.parse (base ++ "/databases/mydb/cells/visits/write"))
-          (Body.fromText "{\"value\":\"1\"}"))
-    _ = Http.request req
-
-    -- Read the cell
-    body = bodyText (Http.get (URI.parse (base ++ "/databases/mydb/cells/visits/read")))
-    printLine ("Visits: " ++ body)
+  UScratch.put "cache:session" "user-data"
+  match UScratch.get "cache:session" with
+    Some val -> printLine ("Cached: " ++ val)
+    None -> printLine "Cache miss"
 ```
 
-### Notes on the Unison HTTP API
+### Using individual handlers
 
-- Wrap HTTP calls in `Threads.run do Http.run do ...` to handle the required abilities
-- `Http.get` returns an `HttpResponse` directly; `Http.request` takes an `HttpRequest` for POST/PUT/DELETE
-- `bodyText` extracts the response body as `Text`
-- `HttpRequest.post` takes a `URI` and a `Body` (`Body.fromText` for strings, `Body.empty` for no body)
-- `HttpRequest.addHeader` sets request headers (needed for `Content-Type: application/json`)
+You don't have to use all abilities. Compose only what you need:
 
-The `use lib.unison_http_15_2_0` line imports the HTTP library namespace. The exact version suffix depends on which version of `@unison/http` you have installed — check with `ls lib` in UCM.
+```unison
+main : '{IO, Exception} ()
+main = do
+  Threads.run do Http.run do
+    handle !myApp with UStorage.handler "http://localhost:4040"
+```
+
+### Available abilities
+
+| Ability | Operations |
+|---------|-----------|
+| `UStorage` | `createDatabase`, `createTable`, `write`, `read`, `delete`, `scan`, `writeCell`, `readCell`, `tx` |
+| `UConfig` | `set`, `get`, `delete`, `list` |
+| `UBlobs` | `write`, `read`, `delete`, `list` |
+| `UScratch` | `put`, `get`, `delete` |
+| `ULog` | `info`, `error`, `warn`, `recent` |
+| `URemote` | `execute`, `submit` |
+| `UServices` | `deploy`, `call`, `list`, `undeploy` |
+
+### Mock handlers for testing
+
+Write programs against abilities, test with mock handlers:
+
+```unison
+mockStorage : Request {UStorage} a -> a
+mockStorage = cases
+  { UStorage.read _ _ _ -> k } -> handle k (Some "mock-value") with mockStorage
+  { UStorage.write _ _ _ _ -> k } -> handle k () with mockStorage
+  { a } -> a
+
+-- Test your app without a running server
+test> myTest = check do
+  result = handle !myApp with mockStorage
+  -- assertions here
+```
 
 ## Running a cluster
 
