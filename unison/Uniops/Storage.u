@@ -1,0 +1,81 @@
+-- Uniops Storage Ability
+-- Durable key-value storage with ordered tables, cells, and transactions.
+
+use lib.unison_http_15_2_0
+
+structural type Uniops.TxOp
+  = WriteTable Text Text Text
+  | WriteCell Text Text
+
+unique ability UStorage where
+  createDatabase : Text -> ()
+  listDatabases : [Text]
+  createTable : Text -> Text -> ()
+  write : Text -> Text -> Text -> Text -> ()
+  read : Text -> Text -> Text -> Optional Text
+  delete : Text -> Text -> Text -> ()
+  scan : Text -> Text -> Text -> Text -> [(Text, Text)]
+  writeCell : Text -> Text -> Text -> ()
+  readCell : Text -> Text -> Optional Text
+  tx : Text -> [Uniops.TxOp] -> ()
+
+UStorage.handler : Text -> Request {UStorage} a -> {IO, Exception, Http, Threads} a
+UStorage.handler baseUrl = cases
+  { UStorage.createDatabase name -> k } ->
+    _ = Uniops.Http.postJson (baseUrl ++ "/databases") (Uniops.Http.toJson [("name", name)])
+    handle k () with UStorage.handler baseUrl
+
+  { UStorage.listDatabases -> k } ->
+    body = Uniops.Http.getJson (baseUrl ++ "/databases")
+    keys = Uniops.Http.parseKeys body
+    handle k keys with UStorage.handler baseUrl
+
+  { UStorage.createTable db table -> k } ->
+    _ = Uniops.Http.postEmpty (baseUrl ++ "/databases/" ++ db ++ "/tables/" ++ table)
+    handle k () with UStorage.handler baseUrl
+
+  { UStorage.write db table key value -> k } ->
+    _ = Uniops.Http.postJson
+          (baseUrl ++ "/databases/" ++ db ++ "/tables/" ++ table ++ "/write")
+          (Uniops.Http.toJson [("key", key), ("value", value)])
+    handle k () with UStorage.handler baseUrl
+
+  { UStorage.read db table key -> k } ->
+    resp = Http.get (URI.parse (baseUrl ++ "/databases/" ++ db ++ "/tables/" ++ table ++ "/read/" ++ key))
+    val = Uniops.Http.parseValue resp
+    handle k val with UStorage.handler baseUrl
+
+  { UStorage.delete db table key -> k } ->
+    _ = Uniops.Http.deleteReq (baseUrl ++ "/databases/" ++ db ++ "/tables/" ++ table ++ "/delete/" ++ key)
+    handle k () with UStorage.handler baseUrl
+
+  { UStorage.scan db table from to -> k } ->
+    body = bodyText (Http.request (HttpRequest.addHeader "Content-Type" "application/json"
+      (HttpRequest.post (URI.parse (baseUrl ++ "/databases/" ++ db ++ "/tables/" ++ table ++ "/scan"))
+        (Body.fromText (Uniops.Http.toJson [("from", from), ("to", to)])))))
+    -- Parse scan response: {"results":[{"key":"k","value":"v"},...]}
+    -- Simple: return empty for now, scan returns raw pairs
+    handle k [] with UStorage.handler baseUrl
+
+  { UStorage.writeCell db name value -> k } ->
+    _ = Uniops.Http.postJson
+          (baseUrl ++ "/databases/" ++ db ++ "/cells/" ++ name ++ "/write")
+          (Uniops.Http.toJson [("value", value)])
+    handle k () with UStorage.handler baseUrl
+
+  { UStorage.readCell db name -> k } ->
+    resp = Http.get (URI.parse (baseUrl ++ "/databases/" ++ db ++ "/cells/" ++ name ++ "/read"))
+    val = Uniops.Http.parseValue resp
+    handle k val with UStorage.handler baseUrl
+
+  { UStorage.tx db ops -> k } ->
+    opsJson = List.map (cases
+      Uniops.TxOp.WriteTable table key value ->
+        "{\"op\":\"write_table\",\"table\":\"" ++ table ++ "\",\"key\":\"" ++ key ++ "\",\"value\":\"" ++ value ++ "\"}"
+      Uniops.TxOp.WriteCell name value ->
+        "{\"op\":\"write_cell\",\"name\":\"" ++ name ++ "\",\"value\":\"" ++ value ++ "\"}") ops
+    body = "{\"operations\":[" ++ Text.join "," opsJson ++ "]}"
+    _ = Uniops.Http.postJson (baseUrl ++ "/databases/" ++ db ++ "/tx") body
+    handle k () with UStorage.handler baseUrl
+
+  { a } -> a

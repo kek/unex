@@ -1,0 +1,24 @@
+-- Uniops Remote Ability
+-- Execute compiled Unison bytecode on remote nodes.
+
+use lib.unison_http_15_2_0
+
+unique ability URemote where
+  execute : Text -> Text
+  submit : Text -> Text
+
+URemote.handler : Text -> Request {URemote} a -> {IO, Exception, Http, Threads} a
+URemote.handler baseUrl = cases
+  { URemote.execute hash -> k } ->
+    body = bodyText (Uniops.Http.postJson
+          (baseUrl ++ "/remote/execute")
+          (Uniops.Http.toJson [("hash", hash)]))
+    handle k body with URemote.handler baseUrl
+
+  { URemote.submit hash -> k } ->
+    body = bodyText (Uniops.Http.postJson
+          (baseUrl ++ "/remote/submit")
+          (Uniops.Http.toJson [("hash", hash)]))
+    handle k body with URemote.handler baseUrl
+
+  { a } -> a

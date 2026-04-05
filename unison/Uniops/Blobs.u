@@ -1,0 +1,43 @@
+-- Uniops Blobs Ability
+-- Binary object storage on the filesystem.
+
+use lib.unison_http_15_2_0
+
+unique ability UBlobs where
+  write : Text -> Text -> Bytes -> ()
+  read : Text -> Text -> Optional Bytes
+  delete : Text -> Text -> ()
+  list : Text -> Text -> [Text]
+
+UBlobs.handler : Text -> Request {UBlobs} a -> {IO, Exception, Http, Threads} a
+UBlobs.handler baseUrl = cases
+  { UBlobs.write db key data -> k } ->
+    b64 = base64Encode data
+    _ = Uniops.Http.postJson
+          (baseUrl ++ "/blobs/" ++ db ++ "/" ++ key)
+          ("{\"data\":\"" ++ b64 ++ "\"}")
+    handle k () with UBlobs.handler baseUrl
+
+  { UBlobs.read db key -> k } ->
+    resp = Http.get (URI.parse (baseUrl ++ "/blobs/" ++ db ++ "/" ++ key))
+    val =
+      if Uniops.Http.getStatus resp == 404 then None
+      else
+        body = bodyText resp
+        match Uniops.Http.extractField body "data" with
+          None -> None
+          Some b64 -> Some (base64Decode b64)
+    handle k val with UBlobs.handler baseUrl
+
+  { UBlobs.delete db key -> k } ->
+    _ = Uniops.Http.deleteReq (baseUrl ++ "/blobs/" ++ db ++ "/" ++ key)
+    handle k () with UBlobs.handler baseUrl
+
+  { UBlobs.list db prefix -> k } ->
+    body = bodyText (Uniops.Http.postJson
+          (baseUrl ++ "/blobs/" ++ db ++ "/list")
+          ("{\"prefix\":\"" ++ prefix ++ "\"}"))
+    keys = Uniops.Http.parseKeys body
+    handle k keys with UBlobs.handler baseUrl
+
+  { a } -> a

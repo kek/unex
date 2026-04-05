@@ -1,0 +1,34 @@
+-- Uniops Config Ability
+-- Encrypted key-value secrets, scoped by environment.
+
+use lib.unison_http_15_2_0
+
+unique ability UConfig where
+  set : Text -> Text -> Text -> ()
+  get : Text -> Text -> Optional Text
+  delete : Text -> Text -> ()
+  list : Text -> [Text]
+
+UConfig.handler : Text -> Request {UConfig} a -> {IO, Exception, Http, Threads} a
+UConfig.handler baseUrl = cases
+  { UConfig.set env key value -> k } ->
+    _ = Uniops.Http.postJson
+          (baseUrl ++ "/config/" ++ env ++ "/" ++ key)
+          (Uniops.Http.toJson [("value", value)])
+    handle k () with UConfig.handler baseUrl
+
+  { UConfig.get env key -> k } ->
+    resp = Http.get (URI.parse (baseUrl ++ "/config/" ++ env ++ "/" ++ key))
+    val = Uniops.Http.parseValue resp
+    handle k val with UConfig.handler baseUrl
+
+  { UConfig.delete env key -> k } ->
+    _ = Uniops.Http.deleteReq (baseUrl ++ "/config/" ++ env ++ "/" ++ key)
+    handle k () with UConfig.handler baseUrl
+
+  { UConfig.list env -> k } ->
+    body = Uniops.Http.getJson (baseUrl ++ "/config/" ++ env)
+    keys = Uniops.Http.parseKeys body
+    handle k keys with UConfig.handler baseUrl
+
+  { a } -> a
