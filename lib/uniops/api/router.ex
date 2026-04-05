@@ -11,6 +11,10 @@ defmodule Uniops.API.Router do
     CellController,
     TransactionController,
     ServicesController,
+    ConfigController,
+    BlobsController,
+    ScratchController,
+    LogController,
     Json
   }
 
@@ -81,6 +85,52 @@ defmodule Uniops.API.Router do
 
   delete "/services/:name" do
     ServicesController.undeploy(conn, name)
+  end
+
+  # Config routes
+  post "/config/:env/:key" do
+    ConfigController.set(conn, env, key)
+  end
+
+  get "/config/:env/:key" do
+    ConfigController.get(conn, env, key)
+  end
+
+  get "/config/:env" do
+    ConfigController.list(conn, env)
+  end
+
+  # Blobs routes — list MUST come before the *key wildcard
+  post "/blobs/:db/list" do
+    BlobsController.list(conn, db)
+  end
+
+  post "/blobs/:db/*key" do
+    key_str = Enum.join(key, "/")
+    BlobsController.write(conn, db, key_str)
+  end
+
+  get "/blobs/:db/*key" do
+    key_str = Enum.join(key, "/")
+    BlobsController.read(conn, db, key_str)
+  end
+
+  # Scratch routes
+  post "/scratch/:key" do
+    ScratchController.put(conn, key)
+  end
+
+  get "/scratch/:key" do
+    ScratchController.get(conn, key)
+  end
+
+  # Log routes
+  post "/log" do
+    LogController.append(conn)
+  end
+
+  get "/log/recent/:n" do
+    LogController.recent(conn, n)
   end
 
   match _ do
