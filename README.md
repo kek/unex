@@ -214,7 +214,7 @@ Compile a Unison program and execute it on a remote node:
 
 ```elixir
 # On node a: compile and cache bytecode
-source = ~s(main : '{IO, Exception} ()\nmain = do printLine "hello from remote!")
+source = "main : '{IO, Exception} ()\nmain = do printLine \"hello from remote!\""
 {:ok, ws} = Uniops.Workspace.create("/tmp/uniops_compile")
 {:ok, path} = Uniops.Workspace.write_source(ws, "prog.u", source)
 {:ok, uc_path} = Uniops.Compiler.compile(ws, path, "main", "prog")
