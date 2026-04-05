@@ -1,7 +1,6 @@
 -- Uniops HTTP Helpers
 -- Shared utilities for ability handlers to communicate with the Uniops HTTP API.
 
-use lib.unison_http_15_2_0
 
 Uniops.Http.postJson : Text -> Text -> {IO, Exception, Http, Threads} HttpResponse
 Uniops.Http.postJson url body =

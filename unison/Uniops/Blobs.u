@@ -1,7 +1,6 @@
 -- Uniops Blobs Ability
 -- Binary object storage on the filesystem.
 
-use lib.unison_http_15_2_0
 
 unique ability UBlobs where
   write : Text -> Text -> Bytes -> ()

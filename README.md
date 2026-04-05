@@ -75,7 +75,7 @@ myProject/main> lib.install @unison/http
 
 2. Copy the `unison/` directory from this repo into your Unison project, or add the files individually.
 
-3. Check the `use lib.unison_http_15_2_0` import in each file — the version suffix must match your installed `@unison/http` version. Check with `ls lib` in UCM.
+That's it. The library names resolve automatically — no version-specific imports needed.
 
 ### Example: Storage with abilities
 
@@ -317,6 +317,6 @@ Roadmap:
 ## Tests
 
 ```bash
-mix test              # all 118 tests
+mix test              # all 142 tests
 mix test --trace      # verbose
 ```

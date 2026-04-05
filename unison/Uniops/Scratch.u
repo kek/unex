@@ -1,7 +1,6 @@
 -- Uniops Scratch Ability
 -- Ephemeral in-memory cache (node-local, lost on restart).
 
-use lib.unison_http_15_2_0
 
 unique ability UScratch where
   put : Text -> Text -> ()

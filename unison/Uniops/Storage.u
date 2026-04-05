@@ -1,7 +1,6 @@
 -- Uniops Storage Ability
 -- Durable key-value storage with ordered tables, cells, and transactions.
 
-use lib.unison_http_15_2_0
 
 structural type Uniops.TxOp
   = WriteTable Text Text Text

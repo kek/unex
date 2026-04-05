@@ -1,7 +1,6 @@
 -- Uniops Config Ability
 -- Encrypted key-value secrets, scoped by environment.
 
-use lib.unison_http_15_2_0
 
 unique ability UConfig where
   set : Text -> Text -> Text -> ()

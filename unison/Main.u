@@ -7,7 +7,6 @@
 --
 -- Where myApp uses any combination of UStorage, UConfig, UBlobs, UScratch, ULog, URemote, UServices.
 
-use lib.unison_http_15_2_0
 
 Uniops.main : Text
   -> '{UStorage, UConfig, UBlobs, UScratch, ULog, URemote, UServices, IO, Exception} a

@@ -1,7 +1,6 @@
 -- Uniops Services Ability
 -- Deploy, call, list, and undeploy named services.
 
-use lib.unison_http_15_2_0
 
 structural type Uniops.ServiceInfo = { name : Text, hash : Text, node : Text }
 

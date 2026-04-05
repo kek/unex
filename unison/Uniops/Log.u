@@ -1,7 +1,6 @@
 -- Uniops Log Ability
 -- Structured logging with ring buffer.
 
-use lib.unison_http_15_2_0
 
 structural type Uniops.LogEntry = { level : Text, message : Text, timestamp : Text, metadata : Text }
 
