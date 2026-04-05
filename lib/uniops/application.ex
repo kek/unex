@@ -7,7 +7,7 @@ defmodule Uniops.Application do
     mnesia_dir = Application.get_env(:uniops, :mnesia_dir)
     if mnesia_dir, do: Uniops.Storage.Schema.init(mnesia_dir)
 
-    children = cluster_children() ++ api_children()
+    children = cluster_children() ++ peer_children() ++ api_children()
     Supervisor.start_link(children, strategy: :one_for_one, name: Uniops.Supervisor)
   end
 
@@ -19,6 +19,16 @@ defmodule Uniops.Application do
       Uniops.Abilities.Scratch,
       Uniops.Abilities.Log
     ]
+  end
+
+  defp peer_children do
+    peers = Application.get_env(:uniops, :peers, [])
+
+    if peers != [] do
+      [{Uniops.Cluster.PeerConnector, peers: peers}]
+    else
+      []
+    end
   end
 
   defp api_children do

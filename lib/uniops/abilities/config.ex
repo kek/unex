@@ -72,7 +72,12 @@ defmodule Uniops.Abilities.Config do
   end
 
   defp encryption_key do
-    configured = Application.get_env(:uniops, :config_encryption_key, "uniops-default-key-change-me!")
+    configured = Application.get_env(:uniops, :config_encryption_key)
+
+    unless configured do
+      raise "No encryption key configured. Set UNIOPS_CONFIG_KEY environment variable."
+    end
+
     :crypto.hash(:sha256, configured)
   end
 

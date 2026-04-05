@@ -1,6 +1,8 @@
 import Config
 
-# Don't auto-start the API server or Mnesia in tests — tests manage their own instances
+# Tests manage their own Mnesia and API instances — don't auto-start anything
 config :uniops,
   start_api: false,
-  mnesia_dir: nil
+  mnesia_dir: nil,
+  blobs_dir: nil,
+  config_encryption_key: "test-key-not-for-production"
