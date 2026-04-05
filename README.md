@@ -153,6 +153,90 @@ main = do
 
 The `use lib.unison_http_15_2_0` line imports the HTTP library namespace. The exact version suffix depends on which version of `@unison/http` you have installed — check with `ls lib` in UCM.
 
+## Running a cluster
+
+Uniops nodes use BEAM's built-in distribution to form clusters. Each node runs its own storage, hash cache, and remote execution service.
+
+### Starting a two-node cluster
+
+**Terminal 1 — start node `a`:**
+
+```bash
+UNIOPS_API_PORT=4040 \
+UNIOPS_MNESIA_DIR=/tmp/uniops_a \
+elixir --sname a --cookie uniops_secret -S mix run --no-halt
+```
+
+**Terminal 2 — start node `b` and connect to `a`:**
+
+```bash
+UNIOPS_API_PORT=4041 \
+UNIOPS_MNESIA_DIR=/tmp/uniops_b \
+elixir --sname b --cookie uniops_secret -S mix run --no-halt \
+  --eval 'Node.connect(:"a@$(hostname -s |> String.trim)")'
+```
+
+Or connect interactively via IEx:
+
+```bash
+UNIOPS_API_PORT=4041 \
+UNIOPS_MNESIA_DIR=/tmp/uniops_b \
+iex --sname b --cookie uniops_secret -S mix
+```
+
+```elixir
+iex(b)> Node.connect(:"a@yourhostname")
+true
+iex(b)> Node.list()
+[:"a@yourhostname"]
+```
+
+Key points:
+- `--sname` gives each node a short name (use `--name` for fully qualified names across machines)
+- `--cookie` must match on all nodes in the cluster
+- Each node needs its own `UNIOPS_API_PORT` and `UNIOPS_MNESIA_DIR`
+- UCM must be on PATH on every machine in the cluster
+
+### Validating the cluster
+
+From an IEx session on any node:
+
+```elixir
+# Check connected peers
+Node.list()
+# => [:"a@yourhostname"]
+
+# Cache some bytecode on this node
+hash = Uniops.Cluster.HashCache.put("test data")
+
+# Verify a peer can resolve it (pulls from us via SyncServer)
+:rpc.call(:"a@yourhostname", Uniops.Cluster.SyncServer, :resolve, [Uniops.Cluster.SyncServer, [hash]])
+# => {:ok, %{"abc123..." => "test data"}}
+```
+
+### Remote execution
+
+Compile a Unison program and execute it on a remote node:
+
+```elixir
+# On node a: compile and cache bytecode
+source = ~s(main : '{IO, Exception} ()\nmain = do printLine "hello from remote!")
+{:ok, ws} = Uniops.Workspace.create("/tmp/uniops_compile")
+{:ok, path} = Uniops.Workspace.write_source(ws, "prog.u", source)
+{:ok, uc_path} = Uniops.Compiler.compile(ws, path, "main", "prog")
+hash = Uniops.Cluster.HashCache.put(File.read!(uc_path))
+
+# Execute on node b — bytecode syncs automatically
+{:ok, result} = Uniops.Remote.execute(hash, node: :"b@yourhostname")
+result.stdout
+# => "hello from remote!\n"
+
+# Or let the system pick a node
+{:ok, result} = Uniops.Remote.submit(hash)
+```
+
+The flow: compile locally → cache bytecode by hash → call `execute` with target node → target resolves the hash from peers → writes temp `.uc` file → runs via UCM → returns stdout/stderr.
+
 ## Configuration
 
 | Env var | Default | Description |
@@ -161,25 +245,33 @@ The `use lib.unison_http_15_2_0` line imports the HTTP library namespace. The ex
 | `UNIOPS_MNESIA_DIR` | system tmp dir | Where Mnesia stores data on disk |
 | `UCM_PATH` | `ucm` | Path to UCM binary |
 
+BEAM distribution flags (passed to `elixir`/`iex`):
+
+| Flag | Example | Description |
+|------|---------|-------------|
+| `--sname` | `--sname a` | Short node name (same subnet) |
+| `--name` | `--name a@10.0.1.5` | Full node name (cross-network) |
+| `--cookie` | `--cookie secret` | Cluster auth token (must match) |
+
 ## Architecture
 
 Uniops follows a two-layer architecture described in the [Unison mastery guide](unison-mastery-guide.md#part-xii):
 
-- **Outer shell (Elixir/BEAM):** Manages UCM subprocesses, provides Mnesia-backed storage, exposes HTTP API
+- **Outer shell (Elixir/BEAM):** Manages UCM subprocesses, provides Mnesia-backed storage, hash cache, cross-node sync, and remote execution
 - **Inner layer (Unison):** Your programs call the HTTP API using standard Unison abilities (`IO`, `Http`, `Threads`)
 
-This is Plan 1-2 of a 6-plan roadmap toward a full open-source Unison distributed runtime:
+Roadmap:
 
 1. ~~Elixir shell + UCM integration~~
 2. ~~Storage (Mnesia) + HTTP API~~
-3. BEAM clustering + hash cache + dependency sync
-4. Remote ability handler (computation shipping)
+3. ~~BEAM clustering + hash cache + dependency sync~~
+4. ~~Remote execution (computation shipping)~~
 5. Services registry (typed RPC)
 6. Supporting abilities (Config, Blobs, Scratch, Log)
 
 ## Tests
 
 ```bash
-mix test              # all 49 tests
+mix test              # all 70 tests
 mix test --trace      # verbose
 ```
