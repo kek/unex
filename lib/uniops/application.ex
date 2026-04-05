@@ -15,7 +15,8 @@ defmodule Uniops.Application do
     [
       Uniops.Cluster.HashCache,
       Uniops.Cluster.SyncServer,
-      Uniops.Services.Registry
+      Uniops.Services.Registry,
+      Uniops.Abilities.Scratch
     ]
   end
 
