@@ -8,7 +8,8 @@ defmodule Uniops.MixProject do
       elixir: "~> 1.17",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      elixirc_paths: elixirc_paths(Mix.env())
+      elixirc_paths: elixirc_paths(Mix.env()),
+      releases: releases()
     ]
   end
 
@@ -20,6 +21,15 @@ defmodule Uniops.MixProject do
   end
 
   defp elixirc_paths(_env), do: ["lib"]
+
+  defp releases do
+    [
+      uniops: [
+        include_executables_for: [:unix],
+        rel_templates_path: "rel"
+      ]
+    ]
+  end
 
   defp deps do
     [
