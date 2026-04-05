@@ -14,7 +14,8 @@ defmodule Uniops.Application do
   defp cluster_children do
     [
       Uniops.Cluster.HashCache,
-      Uniops.Cluster.SyncServer
+      Uniops.Cluster.SyncServer,
+      Uniops.Services.Registry
     ]
   end
 
