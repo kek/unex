@@ -276,6 +276,66 @@ curl -s localhost:4040/services
 curl -s -X DELETE localhost:4040/services/greeter
 ```
 
+## Supporting Abilities
+
+Uniops exposes Config, Blobs, Scratch, and Log — the remaining Unison Cloud abilities — via HTTP.
+
+### Config (encrypted secrets)
+
+```bash
+# Store a secret (AES-256-GCM encrypted at rest)
+curl -s -X POST localhost:4040/config/prod/api_key \
+  -H 'Content-Type: application/json' \
+  -d '{"value":"sk-secret-123"}'
+
+# Read it back
+curl -s localhost:4040/config/prod/api_key
+
+# List keys for an environment
+curl -s localhost:4040/config/prod
+```
+
+### Blobs (binary object storage)
+
+```bash
+# Write a blob (value is base64-encoded)
+curl -s -X POST localhost:4040/blobs/mydb/images/photo.jpg \
+  -H 'Content-Type: application/json' \
+  -d "{\"data\":\"$(base64 < /path/to/photo.jpg)\"}"
+
+# Read it back
+curl -s localhost:4040/blobs/mydb/images/photo.jpg
+
+# List by prefix
+curl -s -X POST localhost:4040/blobs/mydb/list \
+  -H 'Content-Type: application/json' \
+  -d '{"prefix":"images/"}'
+```
+
+### Scratch (ephemeral cache)
+
+```bash
+# Store a temporary value
+curl -s -X POST localhost:4040/scratch/session:abc \
+  -H 'Content-Type: application/json' \
+  -d '{"value":"user-data"}'
+
+# Read it back (lost on restart)
+curl -s localhost:4040/scratch/session:abc
+```
+
+### Log (structured logging)
+
+```bash
+# Append a log entry
+curl -s -X POST localhost:4040/log \
+  -H 'Content-Type: application/json' \
+  -d '{"level":"info","message":"server started","metadata":{"port":4040}}'
+
+# Read recent entries
+curl -s localhost:4040/log/recent/20
+```
+
 ## Configuration
 
 | Env var | Default | Description |
@@ -306,11 +366,11 @@ Roadmap:
 3. ~~BEAM clustering + hash cache + dependency sync~~
 4. ~~Remote execution (computation shipping)~~
 5. ~~Services registry (typed RPC)~~
-6. Supporting abilities (Config, Blobs, Scratch, Log)
+6. ~~Supporting abilities (Config, Blobs, Scratch, Log)~~
 
 ## Tests
 
 ```bash
-mix test              # all 70 tests
+mix test              # all 118 tests
 mix test --trace      # verbose
 ```
