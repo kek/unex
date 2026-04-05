@@ -1,0 +1,30 @@
+-- Uniops Main Combinator
+-- Composes all ability handlers to run a program against a Uniops server.
+--
+-- Usage:
+--   main : '{IO, Exception} ()
+--   main = Uniops.main "http://localhost:4040" myApp
+--
+-- Where myApp uses any combination of UStorage, UConfig, UBlobs, UScratch, ULog, URemote, UServices.
+
+use lib.unison_http_15_2_0
+
+Uniops.main : Text
+  -> '{UStorage, UConfig, UBlobs, UScratch, ULog, URemote, UServices, IO, Exception} a
+  -> '{IO, Exception} a
+Uniops.main baseUrl program = do
+  Threads.run do Http.run do
+    handle
+      (handle
+        (handle
+          (handle
+            (handle
+              (handle
+                (handle !program
+                  with UStorage.handler baseUrl)
+                with UConfig.handler baseUrl)
+              with UBlobs.handler baseUrl)
+            with UScratch.handler baseUrl)
+          with ULog.handler baseUrl)
+        with URemote.handler baseUrl)
+      with UServices.handler baseUrl
