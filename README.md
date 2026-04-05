@@ -232,6 +232,50 @@ result.stdout
 
 The flow: compile locally → cache bytecode by hash → call `execute` with target node → target resolves the hash from peers → writes temp `.uc` file → runs via UCM → returns stdout/stderr.
 
+### Services
+
+Deploy a Unison program as a named service and call it by name from any node:
+
+```elixir
+# Deploy a service (compiles, caches, registers)
+source = "main : '{IO, Exception} ()\nmain = do printLine \"hello service\""
+{:ok, info} = Uniops.Services.deploy("greeter", source)
+# => {:ok, %{name: "greeter", hash: "abc...", node: :a@host, ...}}
+
+# Call it by name
+{:ok, result} = Uniops.Services.call("greeter")
+result.stdout
+# => "hello service\n"
+
+# Call from another node — service is discovered automatically
+# (on node b)
+{:ok, result} = Uniops.Services.call("greeter")
+
+# List all services
+Uniops.Services.list()
+
+# Undeploy
+Uniops.Services.undeploy("greeter")
+```
+
+Services are also available via HTTP:
+
+```bash
+# Deploy
+curl -s -X POST localhost:4040/services/deploy \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"greeter","source":"main : '\''{IO, Exception} ()\nmain = do printLine \"hello\""}'
+
+# Call
+curl -s -X POST localhost:4040/services/greeter/call
+
+# List
+curl -s localhost:4040/services
+
+# Undeploy
+curl -s -X DELETE localhost:4040/services/greeter
+```
+
 ## Configuration
 
 | Env var | Default | Description |
@@ -261,7 +305,7 @@ Roadmap:
 2. ~~Storage (Mnesia) + HTTP API~~
 3. ~~BEAM clustering + hash cache + dependency sync~~
 4. ~~Remote execution (computation shipping)~~
-5. Services registry (typed RPC)
+5. ~~Services registry (typed RPC)~~
 6. Supporting abilities (Config, Blobs, Scratch, Log)
 
 ## Tests
