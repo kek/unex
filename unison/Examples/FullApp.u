@@ -1,0 +1,39 @@
+-- Example: Full application using all abilities via Uniops.main
+--
+-- Run with: (Uniops server must be running on localhost:4040)
+--   myProject/main> run Examples.FullApp.main
+
+use lib.unison_http_15_2_0
+
+Examples.FullApp.app : '{UStorage, UConfig, UBlobs, UScratch, ULog, URemote, UServices, IO, Exception} ()
+Examples.FullApp.app = do
+  -- Log the start
+  ULog.info "Application starting"
+
+  -- Set up storage
+  UStorage.createDatabase "myapp"
+  UStorage.createTable "myapp" "items"
+
+  -- Store a secret
+  UConfig.set "prod" "api_key" "sk-live-secret"
+
+  -- Write and read data
+  UStorage.write "myapp" "items" "item1" "{\"name\":\"Widget\",\"price\":9.99}"
+  match UStorage.read "myapp" "items" "item1" with
+    Some val -> printLine ("Item: " ++ val)
+    None -> printLine "Not found"
+
+  -- Cache something
+  UScratch.put "recent_query" "item1"
+
+  -- Read back the config
+  match UConfig.get "prod" "api_key" with
+    Some key -> printLine ("API key loaded: " ++ Text.take 10 key ++ "...")
+    None -> printLine "No API key"
+
+  ULog.info "Application finished"
+  printLine "All done!"
+
+Examples.FullApp.main : '{IO, Exception} ()
+Examples.FullApp.main =
+  Uniops.main "http://localhost:4040" Examples.FullApp.app
