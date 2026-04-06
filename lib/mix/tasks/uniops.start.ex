@@ -80,23 +80,44 @@ defmodule Mix.Tasks.Uniops.Start do
   end
 
   defp ensure_config do
-    # If runtime.exs didn't set mnesia_dir, apply defaults now
-    unless Application.get_env(:uniops, :mnesia_dir) do
-      data_dir = System.get_env("UNIOPS_DATA") || "./data"
-      mnesia_dir = Path.join(data_dir, "mnesia")
-      blobs_dir = Path.join(data_dir, "blobs")
-      File.mkdir_p!(mnesia_dir)
-      File.mkdir_p!(blobs_dir)
-      Application.put_env(:uniops, :mnesia_dir, mnesia_dir)
-      Application.put_env(:uniops, :blobs_dir, blobs_dir)
-    end
+    # Read all UNIOPS_* env vars and apply them, filling in defaults for anything unset.
+    # This mirrors config/runtime.exs logic for the dev Mix task path.
+    data_dir = System.get_env("UNIOPS_DATA") || "./data"
+    mnesia_dir = Path.join(data_dir, "mnesia")
+    blobs_dir = Path.join(data_dir, "blobs")
+    File.mkdir_p!(mnesia_dir)
+    File.mkdir_p!(blobs_dir)
 
-    unless Application.get_env(:uniops, :config_encryption_key) do
-      key = :crypto.strong_rand_bytes(32) |> Base.encode64()
-      Application.put_env(:uniops, :config_encryption_key, key)
-      IO.puts("[uniops] No encryption key configured. Generated: #{key}")
-      IO.puts("[uniops] Set UNIOPS_CONFIG_KEY to persist this key across restarts.")
-      IO.puts("[uniops] WARNING: If the key changes, existing encrypted Config values become unreadable.")
-    end
+    port =
+      case System.get_env("UNIOPS_PORT") do
+        nil -> 4040
+        val -> String.to_integer(val)
+      end
+
+    encryption_key =
+      case System.get_env("UNIOPS_CONFIG_KEY") do
+        nil ->
+          key = :crypto.strong_rand_bytes(32) |> Base.encode64()
+          IO.puts("[uniops] No encryption key configured. Generated: #{key}")
+          IO.puts("[uniops] Set UNIOPS_CONFIG_KEY to persist this key across restarts.")
+          IO.puts("[uniops] WARNING: If the key changes, existing encrypted Config values become unreadable.")
+          key
+
+        key ->
+          key
+      end
+
+    peers =
+      case System.get_env("UNIOPS_PEERS") do
+        nil -> []
+        val -> String.split(val, ",", trim: true) |> Enum.map(&String.trim/1)
+      end
+
+    Application.put_env(:uniops, :api_port, port)
+    Application.put_env(:uniops, :mnesia_dir, mnesia_dir)
+    Application.put_env(:uniops, :blobs_dir, blobs_dir)
+    Application.put_env(:uniops, :config_encryption_key, encryption_key)
+    Application.put_env(:uniops, :ucm_path, System.get_env("UCM_PATH") || "ucm")
+    Application.put_env(:uniops, :peers, peers)
   end
 end
