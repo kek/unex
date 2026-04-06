@@ -11,7 +11,7 @@ Uniops.Http.postJson url body =
 
 Uniops.Http.postEmpty : Text -> {IO, Exception, Http, Threads} HttpResponse
 Uniops.Http.postEmpty url =
-  Http.request (HttpRequest.post (URI.parse url) Body.empty)
+  Http.request (HttpRequest.addHeader "Content-Type" "application/json" (HttpRequest.post (URI.parse url) Body.empty))
 
 Uniops.Http.getJson : Text -> {IO, Exception, Http, Threads} Text
 Uniops.Http.getJson url = bodyText (Http.get (URI.parse url))

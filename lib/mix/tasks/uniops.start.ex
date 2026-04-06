@@ -67,6 +67,8 @@ defmodule Mix.Tasks.Uniops.Start do
   end
 
   defp start_without_distribution do
+    # Ensure runtime config is applied
+    ensure_config()
     Application.put_env(:uniops, :start_api, true)
     Mix.Task.run("app.start")
 
@@ -75,5 +77,26 @@ defmodule Mix.Tasks.Uniops.Start do
     IO.puts("[uniops] Press Ctrl+C to stop")
 
     Process.sleep(:infinity)
+  end
+
+  defp ensure_config do
+    # If runtime.exs didn't set mnesia_dir, apply defaults now
+    unless Application.get_env(:uniops, :mnesia_dir) do
+      data_dir = System.get_env("UNIOPS_DATA") || "./data"
+      mnesia_dir = Path.join(data_dir, "mnesia")
+      blobs_dir = Path.join(data_dir, "blobs")
+      File.mkdir_p!(mnesia_dir)
+      File.mkdir_p!(blobs_dir)
+      Application.put_env(:uniops, :mnesia_dir, mnesia_dir)
+      Application.put_env(:uniops, :blobs_dir, blobs_dir)
+    end
+
+    unless Application.get_env(:uniops, :config_encryption_key) do
+      key = :crypto.strong_rand_bytes(32) |> Base.encode64()
+      Application.put_env(:uniops, :config_encryption_key, key)
+      IO.puts("[uniops] No encryption key configured. Generated: #{key}")
+      IO.puts("[uniops] Set UNIOPS_CONFIG_KEY to persist this key across restarts.")
+      IO.puts("[uniops] WARNING: If the key changes, existing encrypted Config values become unreadable.")
+    end
   end
 end
