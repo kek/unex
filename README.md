@@ -84,7 +84,7 @@ myApp : '{UStorage, IO, Exception} ()
 myApp = do
   UStorage.createDatabase "mydb"
   UStorage.createTable "mydb" "users"
-  UStorage.write "mydb" "users" "alice" "{\"role\":\"admin\"}"
+  UStorage.write "mydb" "users" "alice" "role=admin"
 
   match UStorage.read "mydb" "users" "alice" with
     Some val -> printLine ("Got: " ++ val)
@@ -94,11 +94,13 @@ main : '{IO, Exception} ()
 main = Uniops.main "http://localhost:4040" myApp
 ```
 
-Run it (with uniops server running):
+Run it (with `mix uniops.start` running in another terminal):
 
 ```
-myProject/main> run main
-Got: {"role":"admin"}
+myapp/main> load app.u
+myapp/main> run main
+
+  Got: role=admin
 ```
 
 ### Example: Config and Scratch
@@ -116,47 +118,24 @@ myApp = do
   match UScratch.get "cache:session" with
     Some val -> printLine ("Cached: " ++ val)
     None -> printLine "Cache miss"
-```
 
-### Using individual handlers
-
-You don't have to use all abilities. Compose only what you need:
-
-```unison
 main : '{IO, Exception} ()
-main = do
-  Threads.run do Http.run do
-    handle !myApp with UStorage.handler "http://localhost:4040"
+main = Uniops.main "http://localhost:4040" myApp
 ```
 
 ### Available abilities
 
-| Ability | Operations |
-|---------|-----------|
-| `UStorage` | `createDatabase`, `createTable`, `write`, `read`, `delete`, `scan`, `writeCell`, `readCell`, `tx` |
-| `UConfig` | `set`, `get`, `delete`, `list` |
-| `UBlobs` | `write`, `read`, `delete`, `list` |
-| `UScratch` | `put`, `get`, `delete` |
-| `ULog` | `info`, `error`, `warn`, `recent` |
-| `URemote` | `execute`, `submit` |
-| `UServices` | `deploy`, `call`, `list`, `undeploy` |
+| Ability | Operations | Backend |
+|---------|-----------|---------|
+| `UStorage` | `createDatabase`, `createTable`, `write`, `read`, `delete`, `scan`, `writeCell`, `readCell`, `tx` | Mnesia |
+| `UConfig` | `set`, `get`, `delete`, `list` | Mnesia + AES-256-GCM |
+| `UBlobs` | `write`, `read`, `delete`, `list` | Filesystem |
+| `UScratch` | `put`, `get`, `delete` | ETS (node-local) |
+| `ULog` | `info`, `error`, `warn`, `recent` | ETS ring buffer |
+| `URemote` | `execute`, `submit` | BEAM distribution |
+| `UServices` | `deploy`, `call`, `list`, `undeploy` | Registry + Remote |
 
-### Mock handlers for testing
-
-Write programs against abilities, test with mock handlers:
-
-```unison
-mockStorage : Request {UStorage} a -> a
-mockStorage = cases
-  { UStorage.read _ _ _ -> k } -> handle k (Some "mock-value") with mockStorage
-  { UStorage.write _ _ _ _ -> k } -> handle k () with mockStorage
-  { a } -> a
-
--- Test your app without a running server
-test> myTest = check do
-  result = handle !myApp with mockStorage
-  -- assertions here
-```
+You can use all abilities at once via `Uniops.main`, or compose individual handlers. See the **[full tutorial](docs/guide.md)** for composing handlers, mock testing, clustering, and architecture details.
 
 ## Running a cluster
 
@@ -300,23 +279,32 @@ See `config.example.exs` for a complete reference. Place at `~/.config/uniops/co
 
 ## Architecture
 
-Uniops follows a two-layer architecture described in the [Unison mastery guide](unison-mastery-guide.md#part-xii):
+Uniops follows a two-layer architecture:
 
-- **Outer shell (Elixir/BEAM):** Manages UCM subprocesses, provides Mnesia-backed storage, hash cache, cross-node sync, and remote execution
-- **Inner layer (Unison):** Your programs call the HTTP API using standard Unison abilities (`IO`, `Http`, `Threads`)
+```
+┌──────────────────────────────────────┐
+│  Your Unison program                 │
+│  (uses UStorage, UConfig, etc.)      │
+│              ↓ abilities             │
+│  Ability handlers → HTTP calls       │
+└──────────────┬───────────────────────┘
+               │ HTTP
+┌──────────────┴───────────────────────┐
+│  Uniops server (Elixir/BEAM)        │
+│  Mnesia · ETS · Filesystem · Crypto  │
+│  BEAM distribution (clustering)      │
+└──────────────────────────────────────┘
+```
 
-Roadmap:
+- **Outer shell (Elixir/BEAM):** UCM subprocess management, Mnesia storage, hash cache, cross-node sync, remote execution
+- **Inner layer (Unison):** Your programs use abstract abilities; handlers translate to HTTP
+- **Unison ability library:** `UStorage`, `UConfig`, `UBlobs`, `UScratch`, `ULog`, `URemote`, `UServices`
 
-1. ~~Elixir shell + UCM integration~~
-2. ~~Storage (Mnesia) + HTTP API~~
-3. ~~BEAM clustering + hash cache + dependency sync~~
-4. ~~Remote execution (computation shipping)~~
-5. ~~Services registry (typed RPC)~~
-6. ~~Supporting abilities (Config, Blobs, Scratch, Log)~~
+For a deep dive, see the [full guide](docs/guide.md) and the [Unison mastery guide](unison-mastery-guide.md#part-xii).
 
 ## Tests
 
 ```bash
-mix test              # all 142 tests
+mix test              # all tests
 mix test --trace      # verbose
 ```
