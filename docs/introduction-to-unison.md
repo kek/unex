@@ -1,4 +1,6 @@
-# Mastering Unison: A Complete Study Guide
+# Introduction to Unison
+
+> **Note:** This document was AI-generated from various online Unison resources. References are listed at the bottom but may not be exhaustive. If you have any corrections or reservations, please get in touch.
 
 ## Part I — The Big Idea: Content-Addressed Code
 
@@ -508,9 +510,9 @@ The Unison language (MIT-licensed) provides every primitive needed for distribut
 
 ### What's Proprietary
 
-The production-grade handler for `Remote` — the networking layer, compute pool, node discovery, hash-syncing protocol, supervisor/worker model, and the durable storage fabric — is the proprietary Unison Cloud runtime. The entire cloud orchestration layer is written in Unison itself but is closed-source. The FAQ states directly: "Currently, we don't have an easy way for folks to run and manage a distributed Unison program on their own cluster."
+The production-grade handler for `Remote` — the networking layer, compute pool, node discovery, hash-syncing protocol, supervisor/worker model, and the durable storage fabric — is provided by Unison Cloud. The orchestration layer is written in Unison itself. The FAQ states directly: "Currently, we don't have an easy way for folks to run and manage a distributed Unison program on their own cluster."
 
-Nobody in the community has built an open-source alternative handler for `Remote`. The architecture makes it theoretically feasible — the ability system means anyone could write a handler using, say, TCP sockets between UCM instances — but it would be a substantial engineering project and nobody has started one publicly.
+Nobody in the community has built a self-hosted handler for `Remote`. The architecture makes it theoretically feasible — the ability system means anyone could write a handler using, say, TCP sockets between UCM instances — but it would be a substantial engineering project and nobody has started one publicly.
 
 ### Unison Cloud vs. BYOC
 
@@ -522,7 +524,7 @@ There is one architectural asymmetry: Unison Computing still operates a lightwei
 
 ### The Practical Upshot
 
-If distributed programming is your primary reason for choosing Unison, you're buying into the Cloud ecosystem (managed or BYOC). If you want the language's other benefits — content-addressed code, no builds, no dependency conflicts, abilities, structured refactoring — those are fully open-source and work perfectly for single-machine programs deployed via Docker. The distribution story is the commercial moat, by design.
+If distributed programming is your primary reason for choosing Unison, the Cloud ecosystem (managed or BYOC) is the supported path. If you want the language's other benefits — content-addressed code, no builds, no dependency conflicts, abilities, structured refactoring — those are fully open-source and work perfectly for single-machine programs deployed via Docker.
 
 ### Spark-Like Distributed Datasets
 
@@ -530,7 +532,7 @@ The Unison team has demonstrated distributed datasets implemented in under 100 l
 
 ### Volturno: Stream Processing
 
-Volturno is Unison's distributed stream-processing library (analogous to Kafka Streams or Flink). Data flows through `KLog` (persistent keyed logs), `KStream` (ephemeral transformation streams), and `Pipeline` (named streaming jobs with persistent state and exactly-once processing). It uses a supervisor/worker model with heartbeats, view changes for fault tolerance, and sharded loglets for parallelism. Volturno runs entirely on the Cloud's `Remote` and `Storage` primitives — it requires the proprietary runtime.
+Volturno is Unison's distributed stream-processing library (analogous to Kafka Streams or Flink). Data flows through `KLog` (persistent keyed logs), `KStream` (ephemeral transformation streams), and `Pipeline` (named streaming jobs with persistent state and exactly-once processing). It uses a supervisor/worker model with heartbeats, view changes for fault tolerance, and sharded loglets for parallelism. Volturno runs entirely on the Cloud's `Remote` and `Storage` primitives — it requires the Cloud runtime.
 
 ---
 
@@ -670,13 +672,13 @@ The Exercism Unison track offers 53 exercises with automatic analysis and option
 
 ---
 
-## Part XII — Architecture for an Open-Source Distributed Runtime
+## Part XII — Architecture for a Self-Hosted Unison Ops Platform
 
-This section describes the architecture for building an open-source replacement for the proprietary Unison Cloud runtime. It details what ability handlers need to be implemented, what can be written in Unison versus what requires an external runtime, and why BEAM (Erlang/OTP via Elixir) is the strongest candidate for the outer shell.
+This section describes the architecture for building a self-hosted platform that provides ability handlers for Unison programs. It details what handlers are needed, what can be written in Unison versus what requires an external runtime, and why BEAM (Erlang/OTP via Elixir) is a strong candidate for the outer shell.
 
 ### What You're Building
 
-You need to implement handlers for the abilities that currently only the proprietary Cloud runtime provides. The core ones are:
+You need to implement handlers for the core Unison Cloud abilities so programs can run on your own infrastructure. The core ones are:
 
 `Remote` — fork a computation to a different node, await its result, get the current time, generate random values. This is the heart of the system. It requires shipping serialized Unison bytecode (identified by hash) from one node to another, syncing any missing dependencies by hash, executing the computation, and returning the result.
 
@@ -688,7 +690,7 @@ You need to implement handlers for the abilities that currently only the proprie
 
 ### The Bootstrapping Problem: What Can Be Written in Unison?
 
-The entire coordination logic — the service registry, the hash-sync protocol, dependency resolution, deployment orchestration, environment/database management, routing of `Services.call` — is ordinary application code. Unison is perfectly capable of all of this, and the proprietary Cloud orchestration layer is itself written entirely in Unison.
+The entire coordination logic — the service registry, the hash-sync protocol, dependency resolution, deployment orchestration, environment/database management, routing of `Services.call` — is ordinary application code. Unison is perfectly capable of all of this, and Unison Cloud's own orchestration layer is itself written entirely in Unison.
 
 You can also write the storage abstraction layer in Unison — the code that translates `OrderedTable.write.tx` into calls to an external database. Using the `Http` ability you can talk to a FoundationDB HTTP API, a PostgreSQL wire protocol library, or an S3-compatible blob store. The `IO` ability gives you sockets, file system access, and environment variables.
 

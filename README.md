@@ -1,6 +1,6 @@
 # Uniops
 
-Open-source ops platform for [Unison](https://www.unison-lang.org/). Provides durable storage, an HTTP API, and UCM process management — the foundation for running Unison programs without the proprietary Cloud runtime.
+Durable storage, an HTTP API, clustering, and UCM process management for deploying and running [Unison](https://www.unison-lang.org/) programs.
 
 ## Quick start
 
@@ -300,7 +300,7 @@ Uniops follows a two-layer architecture:
 - **Inner layer (Unison):** Your programs use abstract abilities; handlers translate to HTTP
 - **Unison ability library:** `UStorage`, `UConfig`, `UBlobs`, `UScratch`, `ULog`, `URemote`, `UServices`
 
-For a deep dive, see the [full guide](docs/guide.md) and the [Unison mastery guide](unison-mastery-guide.md#part-xii).
+For a deep dive, see the [tutorial](docs/guide.md) and the [Introduction to Unison](docs/introduction-to-unison.md).
 
 ## Tests
 

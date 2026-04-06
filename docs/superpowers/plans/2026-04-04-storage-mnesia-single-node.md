@@ -4,7 +4,7 @@
 
 **Goal:** Build a durable key-value storage system backed by Mnesia, exposed via a JSON HTTP API that Unison programs can call using the `Http` ability, implementing OrderedTable, Cell, and transactional semantics on a single BEAM node.
 
-**Architecture:** Mnesia (built into OTP) provides ordered_set tables for sorted key-value storage, set tables for cells, and native ACID transactions. A Plug-based HTTP API server runs inside the OTP application, exposing CRUD + range-scan endpoints. Unison programs use `@unison/http` to call this API, giving them durable storage without the proprietary Cloud runtime. All data is JSON-encoded at the HTTP boundary.
+**Architecture:** Mnesia (built into OTP) provides ordered_set tables for sorted key-value storage, set tables for cells, and native ACID transactions. A Plug-based HTTP API server runs inside the OTP application, exposing CRUD + range-scan endpoints. Unison programs use `@unison/http` to call this API for durable storage. All data is JSON-encoded at the HTTP boundary.
 
 **Tech Stack:** Elixir 1.19 / OTP 28, Mnesia (built-in), Plug + Bandit (HTTP server), Jason (JSON), ExUnit
 
