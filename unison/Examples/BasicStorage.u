@@ -11,8 +11,8 @@ Examples.BasicStorage.app = do
   UStorage.createTable "demo" "users"
 
   -- Write some data
-  UStorage.write "demo" "users" "alice" "{\"role\":\"admin\",\"email\":\"alice@example.com\"}"
-  UStorage.write "demo" "users" "bob" "{\"role\":\"viewer\"}"
+  UStorage.write "demo" "users" "alice" "role=admin,email=alice@example.com"
+  UStorage.write "demo" "users" "bob" "role=viewer"
 
   -- Read it back
   match UStorage.read "demo" "users" "alice" with

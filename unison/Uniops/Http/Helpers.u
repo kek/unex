@@ -18,10 +18,10 @@ Uniops.Http.getJson url = bodyText (Http.get (URI.parse url))
 
 Uniops.Http.deleteReq : Text -> {IO, Exception, Http, Threads} HttpResponse
 Uniops.Http.deleteReq url =
-  Http.request (HttpRequest.delete (URI.parse url) Body.empty)
+  Http.request (HttpRequest.delete (URI.parse url))
 
 Uniops.Http.getStatus : HttpResponse -> Nat
-Uniops.Http.getStatus resp = HttpResponse.statusCode resp
+Uniops.Http.getStatus resp = code (HttpResponse.status resp)
 
 -- Simple JSON key-value pair builder: [("key","val"), ...] -> "{\"key\":\"val\",...}"
 Uniops.Http.toJson : [(Text, Text)] -> Text
@@ -66,5 +66,5 @@ Uniops.Http.parseKeys json =
           if inner == "" then []
           else
             -- Split by comma, strip quotes
-            parts = Text.split "," inner
-            List.map (txt -> Text.drop 1 (Text.dropRight 1 txt)) parts
+            parts = Text.split ?, inner
+            List.map (txt -> Text.drop 1 (Text.dropEnd 1 txt)) parts

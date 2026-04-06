@@ -17,7 +17,7 @@ Examples.FullApp.app = do
   UConfig.set "prod" "api_key" "sk-live-secret"
 
   -- Write and read data
-  UStorage.write "myapp" "items" "item1" "{\"name\":\"Widget\",\"price\":9.99}"
+  UStorage.write "myapp" "items" "item1" "name=Widget,price=9.99"
   match UStorage.read "myapp" "items" "item1" with
     Some val -> printLine ("Item: " ++ val)
     None -> printLine "Not found"

@@ -2,6 +2,13 @@
 -- Binary object storage on the filesystem.
 
 
+-- Encode bytes as hex text for JSON transport
+Uniops.Blobs.hexEncode : Bytes -> Text
+Uniops.Blobs.hexEncode bytes = Text.fromUtf8 (Bytes.toBase16 bytes)
+
+Uniops.Blobs.hexDecode : Text -> Bytes
+Uniops.Blobs.hexDecode txt = Bytes.fromBase16 (Text.toUtf8 txt)
+
 unique ability UBlobs where
   write : Text -> Text -> Bytes -> ()
   read : Text -> Text -> Optional Bytes
@@ -11,10 +18,10 @@ unique ability UBlobs where
 UBlobs.handler : Text -> Request {UBlobs} a -> {IO, Exception, Http, Threads} a
 UBlobs.handler baseUrl = cases
   { UBlobs.write db key data -> k } ->
-    b64 = base64Encode data
+    encoded = Uniops.Blobs.hexEncode data
     _ = Uniops.Http.postJson
           (baseUrl ++ "/blobs/" ++ db ++ "/" ++ key)
-          ("{\"data\":\"" ++ b64 ++ "\"}")
+          ("{\"data\":\"" ++ encoded ++ "\"}")
     handle k () with UBlobs.handler baseUrl
 
   { UBlobs.read db key -> k } ->
@@ -25,7 +32,7 @@ UBlobs.handler baseUrl = cases
         body = bodyText resp
         match Uniops.Http.extractField body "data" with
           None -> None
-          Some b64 -> Some (base64Decode b64)
+          Some encoded -> Some (Uniops.Blobs.hexDecode encoded)
     handle k val with UBlobs.handler baseUrl
 
   { UBlobs.delete db key -> k } ->
