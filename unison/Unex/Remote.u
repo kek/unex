@@ -6,18 +6,18 @@ unique ability Unex.Remote where
   execute : Text -> Text
   submit : Text -> Text
 
-Unex.Remote.handler : Text -> Request {Unex.Remote} a -> {IO, Exception, Http, Threads} a
-Unex.Remote.handler baseUrl = cases
+Unex.Remote.handler : Text -> Text -> Request {Unex.Remote} a -> {IO, Exception, Http, Threads} a
+Unex.Remote.handler baseUrl secret = cases
   { Unex.Remote.execute hash -> k } ->
-    body = bodyText (Unex.Http.postJson
+    body = bodyText (Unex.Http.postJson secret
           (baseUrl ++ "/remote/execute")
           (Unex.Http.toJson [("hash", hash)]))
-    handle k body with Unex.Remote.handler baseUrl
+    handle k body with Unex.Remote.handler baseUrl secret
 
   { Unex.Remote.submit hash -> k } ->
-    body = bodyText (Unex.Http.postJson
+    body = bodyText (Unex.Http.postJson secret
           (baseUrl ++ "/remote/submit")
           (Unex.Http.toJson [("hash", hash)]))
-    handle k body with Unex.Remote.handler baseUrl
+    handle k body with Unex.Remote.handler baseUrl secret
 
   { a } -> a

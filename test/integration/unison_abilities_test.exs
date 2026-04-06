@@ -33,17 +33,24 @@ defmodule Unex.Integration.UnisonAbilitiesTest do
     {:ok, port: @test_port}
   end
 
+  defp test_secret, do: Application.get_env(:unex, :api_secret)
+
   @tag timeout: 300_000
   test "Unex.Storage ability: create DB, write, read", %{port: port} do
+    secret = test_secret()
+
     source = """
     use lib.unison_http_15_2_0
     use lib.base.IO
 
+    authHeader : HttpRequest -> HttpRequest
+    authHeader req = HttpRequest.addHeader "Authorization" "Bearer #{secret}" req
+
     postJson : Text -> Text -> {IO, Exception, Http, Threads} HttpResponse
-    postJson url body = Http.request (HttpRequest.addHeader "Content-Type" "application/json" (HttpRequest.post (URI.parse url) (Body.fromText body)))
+    postJson url body = Http.request (authHeader (HttpRequest.addHeader "Content-Type" "application/json" (HttpRequest.post (URI.parse url) (Body.fromText body))))
 
     postEmpty : Text -> {IO, Exception, Http, Threads} HttpResponse
-    postEmpty url = Http.request (HttpRequest.post (URI.parse url) Body.empty)
+    postEmpty url = Http.request (authHeader (HttpRequest.post (URI.parse url) Body.empty))
 
     toJson : [(Text, Text)] -> Text
     toJson pairs =
@@ -80,7 +87,7 @@ defmodule Unex.Integration.UnisonAbilitiesTest do
         _ = postJson (baseUrl ++ "/databases/" ++ db ++ "/tables/" ++ table ++ "/write") (toJson [("key", key), ("value", value)])
         handle k () with Unex.Storage.handler baseUrl
       { Unex.Storage.read db table key -> k } ->
-        resp = Http.get (URI.parse (baseUrl ++ "/databases/" ++ db ++ "/tables/" ++ table ++ "/read/" ++ key))
+        resp = Http.request (authHeader (HttpRequest.get (URI.parse (baseUrl ++ "/databases/" ++ db ++ "/tables/" ++ table ++ "/read/" ++ key))))
         val = parseValue resp
         handle k val with Unex.Storage.handler baseUrl
       { a } -> a
@@ -107,12 +114,17 @@ defmodule Unex.Integration.UnisonAbilitiesTest do
 
   @tag timeout: 300_000
   test "Unex.Config ability: set and get a secret", %{port: port} do
+    secret = test_secret()
+
     source = """
     use lib.unison_http_15_2_0
     use lib.base.IO
 
+    authHeader : HttpRequest -> HttpRequest
+    authHeader req = HttpRequest.addHeader "Authorization" "Bearer #{secret}" req
+
     postJson : Text -> Text -> {IO, Exception, Http, Threads} HttpResponse
-    postJson url body = Http.request (HttpRequest.addHeader "Content-Type" "application/json" (HttpRequest.post (URI.parse url) (Body.fromText body)))
+    postJson url body = Http.request (authHeader (HttpRequest.addHeader "Content-Type" "application/json" (HttpRequest.post (URI.parse url) (Body.fromText body))))
 
     toJson : [(Text, Text)] -> Text
     toJson pairs =
@@ -141,7 +153,7 @@ defmodule Unex.Integration.UnisonAbilitiesTest do
         _ = postJson (baseUrl ++ "/config/" ++ env ++ "/" ++ key) (toJson [("value", value)])
         handle k () with Unex.Config.handler baseUrl
       { Unex.Config.get env key -> k } ->
-        resp = Http.get (URI.parse (baseUrl ++ "/config/" ++ env ++ "/" ++ key))
+        resp = Http.request (authHeader (HttpRequest.get (URI.parse (baseUrl ++ "/config/" ++ env ++ "/" ++ key))))
         val = parseValue resp
         handle k val with Unex.Config.handler baseUrl
       { a } -> a
@@ -166,12 +178,17 @@ defmodule Unex.Integration.UnisonAbilitiesTest do
 
   @tag timeout: 300_000
   test "Unex.Scratch ability: put and get ephemeral value", %{port: port} do
+    secret = test_secret()
+
     source = """
     use lib.unison_http_15_2_0
     use lib.base.IO
 
+    authHeader : HttpRequest -> HttpRequest
+    authHeader req = HttpRequest.addHeader "Authorization" "Bearer #{secret}" req
+
     postJson : Text -> Text -> {IO, Exception, Http, Threads} HttpResponse
-    postJson url body = Http.request (HttpRequest.addHeader "Content-Type" "application/json" (HttpRequest.post (URI.parse url) (Body.fromText body)))
+    postJson url body = Http.request (authHeader (HttpRequest.addHeader "Content-Type" "application/json" (HttpRequest.post (URI.parse url) (Body.fromText body))))
 
     toJson : [(Text, Text)] -> Text
     toJson pairs =
@@ -200,7 +217,7 @@ defmodule Unex.Integration.UnisonAbilitiesTest do
         _ = postJson (baseUrl ++ "/scratch/" ++ key) (toJson [("value", value)])
         handle k () with Unex.Scratch.handler baseUrl
       { Unex.Scratch.get key -> k } ->
-        resp = Http.get (URI.parse (baseUrl ++ "/scratch/" ++ key))
+        resp = Http.request (authHeader (HttpRequest.get (URI.parse (baseUrl ++ "/scratch/" ++ key))))
         val = parseValue resp
         handle k val with Unex.Scratch.handler baseUrl
       { a } -> a

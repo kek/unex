@@ -57,6 +57,16 @@ if config_env() != :test do
       {key, true}
     end
 
+  api_secret = get.("UNEX_API_SECRET", :api_secret, nil)
+
+  {api_secret, secret_generated?} =
+    if api_secret do
+      {api_secret, false}
+    else
+      secret = Base.encode64(:crypto.strong_rand_bytes(32))
+      {secret, true}
+    end
+
   # --- Validation ---
   if node_name && !cookie do
     raise "UNEX_COOKIE is required when UNEX_NODE is set"
@@ -72,6 +82,7 @@ if config_env() != :test do
     mnesia_dir: Path.join(data_dir, "mnesia"),
     blobs_dir: Path.join(data_dir, "blobs"),
     config_encryption_key: encryption_key,
+    api_secret: api_secret,
     ucm_path: get.("UCM_PATH", :ucm_path, "ucm"),
     peers: peers,
     node_name: node_name,
@@ -82,5 +93,10 @@ if config_env() != :test do
     IO.puts("[unex] No encryption key configured. Generated: #{encryption_key}")
     IO.puts("[unex] Set UNEX_CONFIG_KEY to persist this key across restarts.")
     IO.puts("[unex] WARNING: If the key changes, existing encrypted Config values become unreadable.")
+  end
+
+  if secret_generated? do
+    IO.puts("[unex] No API secret configured. Generated: #{api_secret}")
+    IO.puts("[unex] Set UNEX_API_SECRET to persist this secret across restarts.")
   end
 end

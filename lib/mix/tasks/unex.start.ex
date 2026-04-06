@@ -107,6 +107,18 @@ defmodule Mix.Tasks.Unex.Start do
           key
       end
 
+    api_secret =
+      case System.get_env("UNEX_API_SECRET") do
+        nil ->
+          secret = Base.encode64(:crypto.strong_rand_bytes(32))
+          IO.puts("[unex] No API secret configured. Generated: #{secret}")
+          IO.puts("[unex] Set UNEX_API_SECRET to persist this secret across restarts.")
+          secret
+
+        secret ->
+          secret
+      end
+
     peers =
       case System.get_env("UNEX_PEERS") do
         nil -> []
@@ -117,6 +129,7 @@ defmodule Mix.Tasks.Unex.Start do
     Application.put_env(:unex, :mnesia_dir, mnesia_dir)
     Application.put_env(:unex, :blobs_dir, blobs_dir)
     Application.put_env(:unex, :config_encryption_key, encryption_key)
+    Application.put_env(:unex, :api_secret, api_secret)
     Application.put_env(:unex, :ucm_path, System.get_env("UCM_PATH") || "ucm")
     Application.put_env(:unex, :peers, peers)
   end

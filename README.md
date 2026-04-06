@@ -10,7 +10,7 @@ mix deps.get
 mix unex.start
 ```
 
-The API starts on `http://localhost:4040` with zero configuration.
+The API starts on `http://localhost:4040`. An API secret is auto-generated on first run (printed to stdout). Set `UNEX_API_SECRET` to persist it across restarts.
 
 Verify it works:
 
@@ -21,39 +21,47 @@ curl -s localhost:4040/health
 
 ## Storage API
 
-Unex exposes a JSON HTTP API for durable key-value storage backed by Mnesia.
+All API endpoints (except `/health`) require a bearer token. Pass the secret printed at startup:
 
 ```bash
+AUTH="Authorization: Bearer YOUR_SECRET"
+
 # Create a database (a namespace for tables and cells)
 curl -s -X POST localhost:4040/databases \
+  -H "$AUTH" \
   -H 'Content-Type: application/json' \
   -d '{"name":"mydb"}'
 
 # Create an ordered table (sorted key-value store)
-curl -s -X POST localhost:4040/databases/mydb/tables/users
+curl -s -X POST localhost:4040/databases/mydb/tables/users \
+  -H "$AUTH"
 
 # Write a key-value pair
 curl -s -X POST localhost:4040/databases/mydb/tables/users/write \
+  -H "$AUTH" \
   -H 'Content-Type: application/json' \
   -d '{"key":"alice","value":"{\"age\":30,\"role\":\"admin\"}"}'
 
 # Read it back
-curl -s localhost:4040/databases/mydb/tables/users/read/alice
+curl -s -H "$AUTH" localhost:4040/databases/mydb/tables/users/read/alice
 
 # Range scan (sorted, inclusive)
 curl -s -X POST localhost:4040/databases/mydb/tables/users/scan \
+  -H "$AUTH" \
   -H 'Content-Type: application/json' \
   -d '{"from":"a","to":"z"}'
 
 # Cells (single durable values)
 curl -s -X POST localhost:4040/databases/mydb/cells/counter/write \
+  -H "$AUTH" \
   -H 'Content-Type: application/json' \
   -d '{"value":"42"}'
 
-curl -s localhost:4040/databases/mydb/cells/counter/read
+curl -s -H "$AUTH" localhost:4040/databases/mydb/cells/counter/read
 
 # Atomic transactions (all-or-nothing batch)
 curl -s -X POST localhost:4040/databases/mydb/tx \
+  -H "$AUTH" \
   -H 'Content-Type: application/json' \
   -d '{"operations":[
     {"op":"write_table","table":"users","key":"bob","value":"{}"},
@@ -91,7 +99,7 @@ myApp = do
     None -> printLine "Not found"
 
 main : '{IO, Exception} ()
-main = Unex.main "http://localhost:4040" myApp
+main = Unex.main "http://localhost:4040" "my-secret" myApp
 ```
 
 Run it (with `mix unex.start` running in another terminal):
@@ -120,7 +128,7 @@ myApp = do
     None -> printLine "Cache miss"
 
 main : '{IO, Exception} ()
-main = Unex.main "http://localhost:4040" myApp
+main = Unex.main "http://localhost:4040" "my-secret" myApp
 ```
 
 ### Available abilities
@@ -205,14 +213,15 @@ Unex exposes Config, Blobs, Scratch, and Log — the remaining Unison Cloud abil
 ```bash
 # Store a secret (AES-256-GCM encrypted at rest)
 curl -s -X POST localhost:4040/config/prod/api_key \
+  -H "$AUTH" \
   -H 'Content-Type: application/json' \
   -d '{"value":"sk-secret-123"}'
 
 # Read it back
-curl -s localhost:4040/config/prod/api_key
+curl -s -H "$AUTH" localhost:4040/config/prod/api_key
 
 # List keys for an environment
-curl -s localhost:4040/config/prod
+curl -s -H "$AUTH" localhost:4040/config/prod
 ```
 
 ### Blobs (binary object storage)
@@ -220,14 +229,16 @@ curl -s localhost:4040/config/prod
 ```bash
 # Write a blob (value is base64-encoded)
 curl -s -X POST localhost:4040/blobs/mydb/images/photo.jpg \
+  -H "$AUTH" \
   -H 'Content-Type: application/json' \
   -d "{\"data\":\"$(base64 < /path/to/photo.jpg)\"}"
 
 # Read it back
-curl -s localhost:4040/blobs/mydb/images/photo.jpg
+curl -s -H "$AUTH" localhost:4040/blobs/mydb/images/photo.jpg
 
 # List by prefix
 curl -s -X POST localhost:4040/blobs/mydb/list \
+  -H "$AUTH" \
   -H 'Content-Type: application/json' \
   -d '{"prefix":"images/"}'
 ```
@@ -237,11 +248,12 @@ curl -s -X POST localhost:4040/blobs/mydb/list \
 ```bash
 # Store a temporary value
 curl -s -X POST localhost:4040/scratch/session:abc \
+  -H "$AUTH" \
   -H 'Content-Type: application/json' \
   -d '{"value":"user-data"}'
 
 # Read it back (lost on restart)
-curl -s localhost:4040/scratch/session:abc
+curl -s -H "$AUTH" localhost:4040/scratch/session:abc
 ```
 
 ### Log (structured logging)
@@ -249,11 +261,12 @@ curl -s localhost:4040/scratch/session:abc
 ```bash
 # Append a log entry
 curl -s -X POST localhost:4040/log \
+  -H "$AUTH" \
   -H 'Content-Type: application/json' \
   -d '{"level":"info","message":"server started","metadata":{"port":4040}}'
 
 # Read recent entries
-curl -s localhost:4040/log/recent/20
+curl -s -H "$AUTH" localhost:4040/log/recent/20
 ```
 
 ## Configuration
@@ -269,6 +282,7 @@ Unex resolves config in this order (first wins): environment variables → confi
 | `UNEX_PORT` | `4040` | HTTP API port |
 | `UNEX_DATA` | `./data` | Base directory for Mnesia and blob storage |
 | `UNEX_PEERS` | *(none)* | Comma-separated peer nodes to auto-connect |
+| `UNEX_API_SECRET` | *(generated)* | Bearer token for API authentication |
 | `UNEX_CONFIG_KEY` | *(generated)* | AES-256-GCM encryption key for Config secrets |
 | `UNEX_CONFIG` | *(none)* | Path to config file |
 | `UCM_PATH` | `ucm` | Path to UCM binary |

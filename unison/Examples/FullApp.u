@@ -35,4 +35,4 @@ Examples.FullApp.app = do
 
 Examples.FullApp.main : '{IO, Exception} ()
 Examples.FullApp.main =
-  Unex.main "http://localhost:4040" Examples.FullApp.app
+  Unex.main "http://localhost:4040" "my-secret" Examples.FullApp.app

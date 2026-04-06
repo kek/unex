@@ -1,24 +1,38 @@
 -- Unex HTTP Helpers
 -- Shared utilities for ability handlers to communicate with the Unex HTTP API.
+-- All request functions take a secret for Bearer token authentication.
 
 
-Unex.Http.postJson : Text -> Text -> {IO, Exception, Http, Threads} HttpResponse
-Unex.Http.postJson url body =
+Unex.Http.authHeader : Text -> HttpRequest -> HttpRequest
+Unex.Http.authHeader secret req =
+  HttpRequest.addHeader "Authorization" ("Bearer " ++ secret) req
+
+Unex.Http.postJson : Text -> Text -> Text -> {IO, Exception, Http, Threads} HttpResponse
+Unex.Http.postJson secret url body =
   req =
-    HttpRequest.addHeader "Content-Type" "application/json"
-      (HttpRequest.post (URI.parse url) (Body.fromText body))
+    Unex.Http.authHeader secret
+      (HttpRequest.addHeader "Content-Type" "application/json"
+        (HttpRequest.post (URI.parse url) (Body.fromText body)))
   Http.request req
 
-Unex.Http.postEmpty : Text -> {IO, Exception, Http, Threads} HttpResponse
-Unex.Http.postEmpty url =
-  Http.request (HttpRequest.addHeader "Content-Type" "application/json" (HttpRequest.post (URI.parse url) Body.empty))
+Unex.Http.postEmpty : Text -> Text -> {IO, Exception, Http, Threads} HttpResponse
+Unex.Http.postEmpty secret url =
+  Http.request
+    (Unex.Http.authHeader secret
+      (HttpRequest.addHeader "Content-Type" "application/json"
+        (HttpRequest.post (URI.parse url) Body.empty)))
 
-Unex.Http.getJson : Text -> {IO, Exception, Http, Threads} Text
-Unex.Http.getJson url = bodyText (Http.get (URI.parse url))
+Unex.Http.getJson : Text -> Text -> {IO, Exception, Http, Threads} Text
+Unex.Http.getJson secret url =
+  bodyText (Http.request (Unex.Http.authHeader secret (HttpRequest.get (URI.parse url))))
 
-Unex.Http.deleteReq : Text -> {IO, Exception, Http, Threads} HttpResponse
-Unex.Http.deleteReq url =
-  Http.request (HttpRequest.delete (URI.parse url))
+Unex.Http.getResp : Text -> Text -> {IO, Exception, Http, Threads} HttpResponse
+Unex.Http.getResp secret url =
+  Http.request (Unex.Http.authHeader secret (HttpRequest.get (URI.parse url)))
+
+Unex.Http.deleteReq : Text -> Text -> {IO, Exception, Http, Threads} HttpResponse
+Unex.Http.deleteReq secret url =
+  Http.request (Unex.Http.authHeader secret (HttpRequest.delete (URI.parse url)))
 
 Unex.Http.getStatus : HttpResponse -> Nat
 Unex.Http.getStatus resp = code (HttpResponse.status resp)

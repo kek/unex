@@ -18,6 +18,9 @@ config :unex,
 
   # HTTP API
   api_port: 4040,
+  # api_secret: "your-secret-here",              # required; auto-generated if not set
+
+
 
   # Data storage
   data_dir: "./data",                             # Mnesia and blobs stored under this directory

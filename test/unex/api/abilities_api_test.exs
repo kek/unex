@@ -26,8 +26,11 @@ defmodule Unex.API.AbilitiesAPITest do
   end
 
   defp call(conn) do
+    secret = Application.get_env(:unex, :api_secret)
+
     conn
     |> put_req_header("content-type", "application/json")
+    |> put_req_header("authorization", "Bearer #{secret}")
     |> Unex.API.Router.call(Unex.API.Router.init([]))
   end
 

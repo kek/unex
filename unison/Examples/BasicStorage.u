@@ -31,4 +31,4 @@ Examples.BasicStorage.app = do
 
 Examples.BasicStorage.main : '{IO, Exception} ()
 Examples.BasicStorage.main =
-  Unex.main "http://localhost:4040" Examples.BasicStorage.app
+  Unex.main "http://localhost:4040" "my-secret" Examples.BasicStorage.app

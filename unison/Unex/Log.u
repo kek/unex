@@ -10,27 +10,27 @@ unique ability Unex.Log where
   warn : Text -> ()
   recent : Nat -> [Unex.LogEntry]
 
-Unex.Log.handler : Text -> Request {Unex.Log} a -> {IO, Exception, Http, Threads} a
-Unex.Log.handler baseUrl = cases
+Unex.Log.handler : Text -> Text -> Request {Unex.Log} a -> {IO, Exception, Http, Threads} a
+Unex.Log.handler baseUrl secret = cases
   { Unex.Log.info message -> k } ->
-    _ = Unex.Http.postJson (baseUrl ++ "/log")
+    _ = Unex.Http.postJson secret (baseUrl ++ "/log")
           ("{\"level\":\"info\",\"message\":\"" ++ message ++ "\",\"metadata\":{}}")
-    handle k () with Unex.Log.handler baseUrl
+    handle k () with Unex.Log.handler baseUrl secret
 
   { Unex.Log.error message -> k } ->
-    _ = Unex.Http.postJson (baseUrl ++ "/log")
+    _ = Unex.Http.postJson secret (baseUrl ++ "/log")
           ("{\"level\":\"error\",\"message\":\"" ++ message ++ "\",\"metadata\":{}}")
-    handle k () with Unex.Log.handler baseUrl
+    handle k () with Unex.Log.handler baseUrl secret
 
   { Unex.Log.warn message -> k } ->
-    _ = Unex.Http.postJson (baseUrl ++ "/log")
+    _ = Unex.Http.postJson secret (baseUrl ++ "/log")
           ("{\"level\":\"warn\",\"message\":\"" ++ message ++ "\",\"metadata\":{}}")
-    handle k () with Unex.Log.handler baseUrl
+    handle k () with Unex.Log.handler baseUrl secret
 
   { Unex.Log.recent n -> k } ->
-    body = Unex.Http.getJson (baseUrl ++ "/log/recent/" ++ Nat.toText n)
+    body = Unex.Http.getJson secret (baseUrl ++ "/log/recent/" ++ Nat.toText n)
     -- Return empty list — full JSON array parsing is complex
     -- Users can parse the raw body if needed via getJson directly
-    handle k [] with Unex.Log.handler baseUrl
+    handle k [] with Unex.Log.handler baseUrl secret
 
   { a } -> a

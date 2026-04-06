@@ -61,8 +61,11 @@ defmodule Unex.Integration.UnisonExamplesTest do
     lib = load_library_source()
     example = load_example(example_name)
 
+    secret = Application.get_env(:unex, :api_secret)
+
     (lib <> "\n\n" <> example)
     |> String.replace("http://localhost:4040", "http://127.0.0.1:#{port}")
+    |> String.replace("\"my-secret\"", "\"#{secret}\"")
   end
 
   @tag timeout: 600_000

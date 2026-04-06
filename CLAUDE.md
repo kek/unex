@@ -12,7 +12,7 @@ An ops platform for [Unison](https://www.unison-lang.org/) programs. Two-layer a
 
 ```bash
 mix deps.get                    # Install dependencies
-mix unex.start                  # Start server (API on :4040)
+mix unex.start                # Start server (API on :4040)
 mix test                        # Run all tests
 mix test --trace                # Verbose test output
 mix test test/path/file.exs     # Single test file
@@ -44,14 +44,14 @@ Each maps to a Unison ability and an API controller: `Config` (AES-256-GCM encry
 `HashCache` stores bytecode in ETS keyed by SHA256. `SyncServer` resolves hashes across nodes via RPC. `PeerConnector` auto-connects with exponential backoff. `Remote` coordinates cross-node execution.
 
 ### HTTP API (`lib/unex/api/`)
-Plug router dispatches to controllers. Each controller handles JSON encoding/decoding for its domain. API runs on Bandit, default port 4040.
+Plug router dispatches to controllers. `Auth` plug enforces bearer token (`Authorization: Bearer <secret>`) on all routes except `/health`. Each controller handles JSON encoding/decoding for its domain. API runs on Bandit, default port 4040.
 
 ### Unison ability library (`unison/`)
-`.u` files define abilities and HTTP-backed handlers. `Main.u` composes all handlers. `Examples/` has working programs. These files are meant to be copied into Unison projects.
+`.u` files define abilities and HTTP-backed handlers. All handlers take `baseUrl` and `secret` parameters for authenticated HTTP calls. `Main.u` composes all handlers. `Examples/` has working programs. These files are meant to be copied into Unison projects.
 
 ## Configuration
 
-Resolved in order (first wins): env vars → config file (`UNEX_CONFIG`) → defaults. Key env vars: `UNEX_NODE`, `UNEX_COOKIE`, `UNEX_PORT` (default 4040), `UNEX_DATA` (default `./data`), `UNEX_PEERS`, `UNEX_CONFIG_KEY`, `UCM_PATH`.
+Resolved in order (first wins): env vars → config file (`UNEX_CONFIG`) → defaults. Key env vars: `UNEX_NODE`, `UNEX_COOKIE`, `UNEX_PORT` (default 4040), `UNEX_DATA` (default `./data`), `UNEX_PEERS`, `UNEX_API_SECRET` (auto-generated if not set), `UNEX_CONFIG_KEY`, `UCM_PATH`.
 
 ## Test Structure
 

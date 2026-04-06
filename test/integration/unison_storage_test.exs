@@ -50,9 +50,14 @@ defmodule Unex.Integration.UnisonStorageTest do
 
   @tag timeout: 300_000
   test "Unison program writes and reads from storage API", %{port: port} do
+    secret = Application.get_env(:unex, :api_secret)
+
     source = """
     use lib.unison_http_15_2_0
     use lib.base.IO
+
+    authHeader : HttpRequest -> HttpRequest
+    authHeader req = HttpRequest.addHeader "Authorization" "Bearer #{secret}" req
 
     main : '{IO, Exception} ()
     main = do
@@ -61,30 +66,33 @@ defmodule Unex.Integration.UnisonStorageTest do
       Threads.run do Http.run do
         -- Step 1: create database
         createDbReq =
-          HttpRequest.addHeader "Content-Type" "application/json"
-            (HttpRequest.post
-              (URI.parse (base ++ "/databases"))
-              (Body.fromText "{\\"name\\":\\"unisondb\\"}"))
+          authHeader
+            (HttpRequest.addHeader "Content-Type" "application/json"
+              (HttpRequest.post
+                (URI.parse (base ++ "/databases"))
+                (Body.fromText "{\\"name\\":\\"unisondb\\"}")))
         _ = Http.request createDbReq
 
         -- Step 2: ensure table
         ensureTableReq =
-          HttpRequest.addHeader "Content-Type" "application/json"
-            (HttpRequest.post
-              (URI.parse (base ++ "/databases/unisondb/tables/items"))
-              Body.empty)
+          authHeader
+            (HttpRequest.addHeader "Content-Type" "application/json"
+              (HttpRequest.post
+                (URI.parse (base ++ "/databases/unisondb/tables/items"))
+                Body.empty))
         _ = Http.request ensureTableReq
 
         -- Step 3: write key/value
         writeReq =
-          HttpRequest.addHeader "Content-Type" "application/json"
-            (HttpRequest.post
-              (URI.parse (base ++ "/databases/unisondb/tables/items/write"))
-              (Body.fromText "{\\"key\\":\\"hello\\",\\"value\\":\\"world\\"}"))
+          authHeader
+            (HttpRequest.addHeader "Content-Type" "application/json"
+              (HttpRequest.post
+                (URI.parse (base ++ "/databases/unisondb/tables/items/write"))
+                (Body.fromText "{\\"key\\":\\"hello\\",\\"value\\":\\"world\\"}")))
         _ = Http.request writeReq
 
         -- Step 4: read back
-        readResp = Http.get (URI.parse (base ++ "/databases/unisondb/tables/items/read/hello"))
+        readResp = Http.request (authHeader (HttpRequest.get (URI.parse (base ++ "/databases/unisondb/tables/items/read/hello"))))
         body = bodyText readResp
         printLine body
     """

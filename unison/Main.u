@@ -3,15 +3,16 @@
 --
 -- Usage:
 --   main : '{IO, Exception} ()
---   main = Unex.main "http://localhost:4040" myApp
+--   main = Unex.main "http://localhost:4040" "my-secret" myApp
 --
 -- Where myApp uses any combination of Unex.Storage, Unex.Config, Unex.Blobs, Unex.Scratch, Unex.Log, Unex.Remote, Unex.Services.
 
 
 Unex.main : Text
+  -> Text
   -> '{Unex.Storage, Unex.Config, Unex.Blobs, Unex.Scratch, Unex.Log, Unex.Remote, Unex.Services, IO, Exception} a
   -> '{IO, Exception} a
-Unex.main baseUrl program = do
+Unex.main baseUrl secret program = do
   Threads.run do Http.run do
     handle
       (handle
@@ -20,10 +21,10 @@ Unex.main baseUrl program = do
             (handle
               (handle
                 (handle !program
-                  with Unex.Storage.handler baseUrl)
-                with Unex.Config.handler baseUrl)
-              with Unex.Blobs.handler baseUrl)
-            with Unex.Scratch.handler baseUrl)
-          with Unex.Log.handler baseUrl)
-        with Unex.Remote.handler baseUrl)
-      with Unex.Services.handler baseUrl
+                  with Unex.Storage.handler baseUrl secret)
+                with Unex.Config.handler baseUrl secret)
+              with Unex.Blobs.handler baseUrl secret)
+            with Unex.Scratch.handler baseUrl secret)
+          with Unex.Log.handler baseUrl secret)
+        with Unex.Remote.handler baseUrl secret)
+      with Unex.Services.handler baseUrl secret

@@ -21,6 +21,8 @@ defmodule Unex.API.RouterTest do
   end
 
   defp call(method, path, body \\ nil) do
+    secret = Application.get_env(:unex, :api_secret)
+
     conn =
       if body do
         conn(method, path, Jason.encode!(body))
@@ -29,7 +31,9 @@ defmodule Unex.API.RouterTest do
         conn(method, path)
       end
 
-    Router.call(conn, @opts)
+    conn
+    |> put_req_header("authorization", "Bearer #{secret}")
+    |> Router.call(@opts)
   end
 
   defp json_body(conn) do

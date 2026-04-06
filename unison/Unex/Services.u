@@ -10,25 +10,25 @@ unique ability Unex.Services where
   list : [Unex.ServiceInfo]
   undeploy : Text -> ()
 
-Unex.Services.handler : Text -> Request {Unex.Services} a -> {IO, Exception, Http, Threads} a
-Unex.Services.handler baseUrl = cases
+Unex.Services.handler : Text -> Text -> Request {Unex.Services} a -> {IO, Exception, Http, Threads} a
+Unex.Services.handler baseUrl secret = cases
   { Unex.Services.deploy name source -> k } ->
-    body = bodyText (Unex.Http.postJson
+    body = bodyText (Unex.Http.postJson secret
           (baseUrl ++ "/services/deploy")
           ("{\"name\":\"" ++ name ++ "\",\"source\":\"" ++ source ++ "\"}"))
-    handle k body with Unex.Services.handler baseUrl
+    handle k body with Unex.Services.handler baseUrl secret
 
   { Unex.Services.call name -> k } ->
-    body = bodyText (Unex.Http.postEmpty (baseUrl ++ "/services/" ++ name ++ "/call"))
-    handle k body with Unex.Services.handler baseUrl
+    body = bodyText (Unex.Http.postEmpty secret (baseUrl ++ "/services/" ++ name ++ "/call"))
+    handle k body with Unex.Services.handler baseUrl secret
 
   { Unex.Services.list -> k } ->
-    _ = Unex.Http.getJson (baseUrl ++ "/services")
+    _ = Unex.Http.getJson secret (baseUrl ++ "/services")
     -- Return empty list — full JSON array parsing is complex
-    handle k [] with Unex.Services.handler baseUrl
+    handle k [] with Unex.Services.handler baseUrl secret
 
   { Unex.Services.undeploy name -> k } ->
-    _ = Unex.Http.deleteReq (baseUrl ++ "/services/" ++ name)
-    handle k () with Unex.Services.handler baseUrl
+    _ = Unex.Http.deleteReq secret (baseUrl ++ "/services/" ++ name)
+    handle k () with Unex.Services.handler baseUrl secret
 
   { a } -> a

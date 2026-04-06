@@ -76,7 +76,7 @@ myApp = do
   printLine "Done!"
 
 main : '{IO, Exception} ()
-main = Unex.main "http://localhost:4040" myApp
+main = Unex.main "http://localhost:4040" "my-secret" myApp
 ```
 
 Load and run it in UCM (with `mix unex.start` running in another terminal):
@@ -126,7 +126,7 @@ secretsApp = do
   printLine ("Prod keys: " ++ Text.join ", " keys)
 
 main : '{IO, Exception} ()
-main = Unex.main "http://localhost:4040" secretsApp
+main = Unex.main "http://localhost:4040" "my-secret" secretsApp
 ```
 
 ```
@@ -153,7 +153,7 @@ cacheApp = do
   Unex.Scratch.delete "session:user42"
 
 main : '{IO, Exception} ()
-main = Unex.main "http://localhost:4040" cacheApp
+main = Unex.main "http://localhost:4040" "my-secret" cacheApp
 ```
 
 ## Part 6: Composing multiple abilities
@@ -191,7 +191,7 @@ fullApp = do
   printLine "All done!"
 
 main : '{IO, Exception} ()
-main = Unex.main "http://localhost:4040" fullApp
+main = Unex.main "http://localhost:4040" "my-secret" fullApp
 ```
 
 ### Using individual handlers
@@ -203,15 +203,15 @@ You don't have to use all seven abilities. Compose only what you need:
 main : '{IO, Exception} ()
 main = do
   Threads.run do Http.run do
-    handle !myStorageApp with Unex.Storage.handler "http://localhost:4040"
+    handle !myStorageApp with Unex.Storage.handler "http://localhost:4040" "my-secret"
 
 -- Storage + Config
 main : '{IO, Exception} ()
 main = do
   Threads.run do Http.run do
     handle
-      (handle !myApp with Unex.Storage.handler "http://localhost:4040")
-      with Unex.Config.handler "http://localhost:4040"
+      (handle !myApp with Unex.Storage.handler "http://localhost:4040" "my-secret")
+      with Unex.Config.handler "http://localhost:4040" "my-secret"
 ```
 
 ## Part 7: Testing with mock handlers

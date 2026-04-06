@@ -22,6 +22,8 @@ defmodule Unex.API.Router do
     parsers: [:json],
     json_decoder: Jason
 
+  plug Unex.API.Auth
+
   plug :match
   plug :dispatch
 

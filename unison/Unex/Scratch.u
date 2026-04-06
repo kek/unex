@@ -1,0 +1,27 @@
+-- Unex Scratch Ability
+-- Ephemeral in-memory cache (node-local, lost on restart).
+
+
+unique ability Unex.Scratch where
+  put : Text -> Text -> ()
+  get : Text -> Optional Text
+  delete : Text -> ()
+
+Unex.Scratch.handler : Text -> Text -> Request {Unex.Scratch} a -> {IO, Exception, Http, Threads} a
+Unex.Scratch.handler baseUrl secret = cases
+  { Unex.Scratch.put key value -> k } ->
+    _ = Unex.Http.postJson secret
+          (baseUrl ++ "/scratch/" ++ key)
+          (Unex.Http.toJson [("value", value)])
+    handle k () with Unex.Scratch.handler baseUrl secret
+
+  { Unex.Scratch.get key -> k } ->
+    resp = Unex.Http.getResp secret (baseUrl ++ "/scratch/" ++ key)
+    val = Unex.Http.parseValue resp
+    handle k val with Unex.Scratch.handler baseUrl secret
+
+  { Unex.Scratch.delete key -> k } ->
+    _ = Unex.Http.deleteReq secret (baseUrl ++ "/scratch/" ++ key)
+    handle k () with Unex.Scratch.handler baseUrl secret
+
+  { a } -> a

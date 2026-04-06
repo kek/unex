@@ -1,0 +1,33 @@
+-- Unex Config Ability
+-- Encrypted key-value secrets, scoped by environment.
+
+
+unique ability Unex.Config where
+  set : Text -> Text -> Text -> ()
+  get : Text -> Text -> Optional Text
+  delete : Text -> Text -> ()
+  list : Text -> [Text]
+
+Unex.Config.handler : Text -> Text -> Request {Unex.Config} a -> {IO, Exception, Http, Threads} a
+Unex.Config.handler baseUrl secret = cases
+  { Unex.Config.set env key value -> k } ->
+    _ = Unex.Http.postJson secret
+          (baseUrl ++ "/config/" ++ env ++ "/" ++ key)
+          (Unex.Http.toJson [("value", value)])
+    handle k () with Unex.Config.handler baseUrl secret
+
+  { Unex.Config.get env key -> k } ->
+    resp = Unex.Http.getResp secret (baseUrl ++ "/config/" ++ env ++ "/" ++ key)
+    val = Unex.Http.parseValue resp
+    handle k val with Unex.Config.handler baseUrl secret
+
+  { Unex.Config.delete env key -> k } ->
+    _ = Unex.Http.deleteReq secret (baseUrl ++ "/config/" ++ env ++ "/" ++ key)
+    handle k () with Unex.Config.handler baseUrl secret
+
+  { Unex.Config.list env -> k } ->
+    body = Unex.Http.getJson secret (baseUrl ++ "/config/" ++ env)
+    keys = Unex.Http.parseKeys body
+    handle k keys with Unex.Config.handler baseUrl secret
+
+  { a } -> a
