@@ -1,4 +1,4 @@
-defmodule Uniops.Integration.EndToEndTest do
+defmodule Unex.Integration.EndToEndTest do
   use ExUnit.Case, async: false
 
   describe "eval/2" do
@@ -8,7 +8,7 @@ defmodule Uniops.Integration.EndToEndTest do
       main = do printLine "42"
       """
 
-      assert {:ok, result} = Uniops.eval(source)
+      assert {:ok, result} = Unex.eval(source)
       assert result.stdout =~ "42"
     end
 
@@ -18,7 +18,7 @@ defmodule Uniops.Integration.EndToEndTest do
       greet = do printLine "hi there"
       """
 
-      assert {:ok, result} = Uniops.eval(source, entry: "greet")
+      assert {:ok, result} = Unex.eval(source, entry: "greet")
       assert result.stdout =~ "hi there"
     end
   end
@@ -30,7 +30,7 @@ defmodule Uniops.Integration.EndToEndTest do
       main = do printLine "bytecode works"
       """
 
-      assert {:ok, result} = Uniops.compile_and_run(source)
+      assert {:ok, result} = Unex.compile_and_run(source)
       assert result.stdout =~ "bytecode works"
     end
   end

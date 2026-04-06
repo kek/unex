@@ -1,9 +1,9 @@
-defmodule Uniops.MixProject do
+defmodule Unex.MixProject do
   use Mix.Project
 
   def project do
     [
-      app: :uniops,
+      app: :unex,
       version: "0.1.0",
       elixir: "~> 1.17",
       start_permanent: Mix.env() == :prod,
@@ -16,7 +16,7 @@ defmodule Uniops.MixProject do
   def application do
     [
       extra_applications: [:logger, :mnesia],
-      mod: {Uniops.Application, []}
+      mod: {Unex.Application, []}
     ]
   end
 
@@ -24,7 +24,7 @@ defmodule Uniops.MixProject do
 
   defp releases do
     [
-      uniops: [
+      unex: [
         include_executables_for: [:unix],
         rel_templates_path: "rel"
       ]

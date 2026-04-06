@@ -12,7 +12,7 @@
 
 ## Scope Note
 
-This is Plan 2 of 6 for the Uniops project. It covers **only** single-node storage (OrderedTable, Cell, Transaction) with an HTTP API. It does **not** cover:
+This is Plan 2 of 6 for the Unex project. It covers **only** single-node storage (OrderedTable, Cell, Transaction) with an HTTP API. It does **not** cover:
 
 - `Table` (basic hash KV) — trivially addable later, same pattern as OrderedTable
 - `Blobs` — binary object storage, deferred to Plan 6
@@ -30,7 +30,7 @@ This is Plan 2 of 6 for the Uniops project. It covers **only** single-node stora
 
 ```
 lib/
-  uniops/
+  unex/
     application.ex                    # Modify: add Mnesia init + HTTP server to supervision tree
     storage/
       schema.ex                       # Mnesia schema initialization at application startup
@@ -49,7 +49,7 @@ config/
   config.exs                          # Modify: add storage + API config
 mix.exs                               # Modify: add deps (plug, bandit, jason)
 test/
-  uniops/
+  unex/
     storage/
       database_test.exs               # Database CRUD tests
       ordered_table_test.exs          # OrderedTable operation tests
@@ -91,7 +91,7 @@ In `mix.exs`, update the `application` function:
   def application do
     [
       extra_applications: [:logger, :mnesia],
-      mod: {Uniops.Application, []}
+      mod: {Unex.Application, []}
     ]
   end
 ```
@@ -101,9 +101,9 @@ In `mix.exs`, update the `application` function:
 Append to `config/config.exs`:
 
 ```elixir
-config :uniops,
-  api_port: String.to_integer(System.get_env("UNIOPS_API_PORT") || "4040"),
-  mnesia_dir: System.get_env("UNIOPS_MNESIA_DIR") || Path.join(System.tmp_dir!(), "uniops_mnesia")
+config :unex,
+  api_port: String.to_integer(System.get_env("UNEX_API_PORT") || "4040"),
+  mnesia_dir: System.get_env("UNEX_MNESIA_DIR") || Path.join(System.tmp_dir!(), "unex_mnesia")
 ```
 
 - [ ] **Step 4: Install dependencies**
@@ -128,22 +128,22 @@ jj new
 ### Task 2: Mnesia Schema Initialization
 
 **Files:**
-- Create: `lib/uniops/storage/schema.ex`
-- Create: `test/uniops/storage/schema_test.exs`
-- Modify: `lib/uniops/application.ex`
+- Create: `lib/unex/storage/schema.ex`
+- Create: `test/unex/storage/schema_test.exs`
+- Modify: `lib/unex/application.ex`
 
 Mnesia needs a schema created before tables can be used. We create the schema on disk at startup, and manage a registry table that tracks which databases/tables exist.
 
 - [ ] **Step 1: Write the failing test**
 
-Create `test/uniops/storage/schema_test.exs`:
+Create `test/unex/storage/schema_test.exs`:
 
 ```elixir
-defmodule Uniops.Storage.SchemaTest do
+defmodule Unex.Storage.SchemaTest do
   use ExUnit.Case, async: false
 
   setup do
-    dir = Path.join(System.tmp_dir!(), "uniops_mnesia_test_#{System.unique_integer([:positive])}")
+    dir = Path.join(System.tmp_dir!(), "unex_mnesia_test_#{System.unique_integer([:positive])}")
     File.mkdir_p!(dir)
     on_exit(fn -> File.rm_rf!(dir) end)
     %{dir: dir}
@@ -151,7 +151,7 @@ defmodule Uniops.Storage.SchemaTest do
 
   describe "init/1" do
     test "initializes Mnesia with a schema on disk", %{dir: dir} do
-      assert :ok = Uniops.Storage.Schema.init(dir)
+      assert :ok = Unex.Storage.Schema.init(dir)
       assert :mnesia.system_info(:is_running) == :yes
       assert :mnesia.system_info(:use_dir) == true
     end
@@ -161,20 +161,20 @@ end
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `mix test test/uniops/storage/schema_test.exs`
-Expected: FAIL — `Uniops.Storage.Schema` not found
+Run: `mix test test/unex/storage/schema_test.exs`
+Expected: FAIL — `Unex.Storage.Schema` not found
 
 - [ ] **Step 3: Implement schema initialization**
 
-Create `lib/uniops/storage/schema.ex`:
+Create `lib/unex/storage/schema.ex`:
 
 ```elixir
-defmodule Uniops.Storage.Schema do
+defmodule Unex.Storage.Schema do
   @moduledoc """
   Initializes Mnesia schema and core registry tables at application startup.
   """
 
-  @registry_table :uniops_registry
+  @registry_table :unex_registry
 
   @doc """
   Initializes Mnesia with disk-based schema at the given directory.
@@ -217,7 +217,7 @@ end
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `mix test test/uniops/storage/schema_test.exs`
+Run: `mix test test/unex/storage/schema_test.exs`
 Expected: 1 test, 0 failures
 
 - [ ] **Step 5: Commit**
@@ -232,23 +232,23 @@ jj new
 ### Task 3: Database Management
 
 **Files:**
-- Create: `lib/uniops/storage/database.ex`
-- Create: `test/uniops/storage/database_test.exs`
+- Create: `lib/unex/storage/database.ex`
+- Create: `test/unex/storage/database_test.exs`
 
 A Database is a namespace that groups tables and cells. Creating a database registers it in the Mnesia registry. It's a lightweight logical container.
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `test/uniops/storage/database_test.exs`:
+Create `test/unex/storage/database_test.exs`:
 
 ```elixir
-defmodule Uniops.Storage.DatabaseTest do
+defmodule Unex.Storage.DatabaseTest do
   use ExUnit.Case, async: false
 
   setup do
-    dir = Path.join(System.tmp_dir!(), "uniops_db_test_#{System.unique_integer([:positive])}")
+    dir = Path.join(System.tmp_dir!(), "unex_db_test_#{System.unique_integer([:positive])}")
     File.mkdir_p!(dir)
-    Uniops.Storage.Schema.init(dir)
+    Unex.Storage.Schema.init(dir)
     on_exit(fn ->
       :mnesia.stop()
       File.rm_rf!(dir)
@@ -258,31 +258,31 @@ defmodule Uniops.Storage.DatabaseTest do
 
   describe "create/1" do
     test "creates a database and returns :ok" do
-      assert :ok = Uniops.Storage.Database.create("mydb")
+      assert :ok = Unex.Storage.Database.create("mydb")
     end
 
     test "is idempotent" do
-      assert :ok = Uniops.Storage.Database.create("mydb")
-      assert :ok = Uniops.Storage.Database.create("mydb")
+      assert :ok = Unex.Storage.Database.create("mydb")
+      assert :ok = Unex.Storage.Database.create("mydb")
     end
   end
 
   describe "exists?/1" do
     test "returns false for nonexistent database" do
-      refute Uniops.Storage.Database.exists?("nope")
+      refute Unex.Storage.Database.exists?("nope")
     end
 
     test "returns true after creation" do
-      Uniops.Storage.Database.create("mydb")
-      assert Uniops.Storage.Database.exists?("mydb")
+      Unex.Storage.Database.create("mydb")
+      assert Unex.Storage.Database.exists?("mydb")
     end
   end
 
   describe "list/0" do
     test "returns list of created databases" do
-      Uniops.Storage.Database.create("alpha")
-      Uniops.Storage.Database.create("beta")
-      dbs = Uniops.Storage.Database.list()
+      Unex.Storage.Database.create("alpha")
+      Unex.Storage.Database.create("beta")
+      dbs = Unex.Storage.Database.list()
       assert "alpha" in dbs
       assert "beta" in dbs
     end
@@ -292,15 +292,15 @@ end
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `mix test test/uniops/storage/database_test.exs`
-Expected: FAIL — `Uniops.Storage.Database` not found
+Run: `mix test test/unex/storage/database_test.exs`
+Expected: FAIL — `Unex.Storage.Database` not found
 
 - [ ] **Step 3: Implement database management**
 
-Create `lib/uniops/storage/database.ex`:
+Create `lib/unex/storage/database.ex`:
 
 ```elixir
-defmodule Uniops.Storage.Database do
+defmodule Unex.Storage.Database do
   @moduledoc """
   Manages logical databases (namespaces for tables and cells).
   Databases are registered in the Mnesia registry table.
@@ -311,7 +311,7 @@ defmodule Uniops.Storage.Database do
   """
   def create(name) when is_binary(name) do
     :mnesia.transaction(fn ->
-      :mnesia.write({Uniops.Storage.Schema.registry_table(), {:database, name}, true})
+      :mnesia.write({Unex.Storage.Schema.registry_table(), {:database, name}, true})
     end)
     |> case do
       {:atomic, :ok} -> :ok
@@ -324,7 +324,7 @@ defmodule Uniops.Storage.Database do
   """
   def exists?(name) when is_binary(name) do
     case :mnesia.transaction(fn ->
-           :mnesia.read(Uniops.Storage.Schema.registry_table(), {:database, name})
+           :mnesia.read(Unex.Storage.Schema.registry_table(), {:database, name})
          end) do
       {:atomic, [_]} -> true
       {:atomic, []} -> false
@@ -337,7 +337,7 @@ defmodule Uniops.Storage.Database do
   def list do
     {:atomic, records} =
       :mnesia.transaction(fn ->
-        :mnesia.match_object({Uniops.Storage.Schema.registry_table(), {:database, :_}, :_})
+        :mnesia.match_object({Unex.Storage.Schema.registry_table(), {:database, :_}, :_})
       end)
 
     Enum.map(records, fn {_, {:database, name}, _} -> name end)
@@ -347,7 +347,7 @@ end
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `mix test test/uniops/storage/database_test.exs`
+Run: `mix test test/unex/storage/database_test.exs`
 Expected: 4 tests, 0 failures
 
 - [ ] **Step 5: Commit**
@@ -362,24 +362,24 @@ jj new
 ### Task 4: OrderedTable
 
 **Files:**
-- Create: `lib/uniops/storage/ordered_table.ex`
-- Create: `test/uniops/storage/ordered_table_test.exs`
+- Create: `lib/unex/storage/ordered_table.ex`
+- Create: `test/unex/storage/ordered_table_test.exs`
 
 OrderedTable is the primary storage primitive — a sorted key-value store backed by a Mnesia `ordered_set` table. Supports write, read, delete, and range scan.
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `test/uniops/storage/ordered_table_test.exs`:
+Create `test/unex/storage/ordered_table_test.exs`:
 
 ```elixir
-defmodule Uniops.Storage.OrderedTableTest do
+defmodule Unex.Storage.OrderedTableTest do
   use ExUnit.Case, async: false
 
   setup do
-    dir = Path.join(System.tmp_dir!(), "uniops_ot_test_#{System.unique_integer([:positive])}")
+    dir = Path.join(System.tmp_dir!(), "unex_ot_test_#{System.unique_integer([:positive])}")
     File.mkdir_p!(dir)
-    Uniops.Storage.Schema.init(dir)
-    Uniops.Storage.Database.create("testdb")
+    Unex.Storage.Schema.init(dir)
+    Unex.Storage.Database.create("testdb")
     on_exit(fn ->
       :mnesia.stop()
       File.rm_rf!(dir)
@@ -389,59 +389,59 @@ defmodule Uniops.Storage.OrderedTableTest do
 
   describe "ensure/2" do
     test "creates an ordered table within a database", %{db: db} do
-      assert :ok = Uniops.Storage.OrderedTable.ensure(db, "users")
+      assert :ok = Unex.Storage.OrderedTable.ensure(db, "users")
     end
 
     test "is idempotent", %{db: db} do
-      assert :ok = Uniops.Storage.OrderedTable.ensure(db, "users")
-      assert :ok = Uniops.Storage.OrderedTable.ensure(db, "users")
+      assert :ok = Unex.Storage.OrderedTable.ensure(db, "users")
+      assert :ok = Unex.Storage.OrderedTable.ensure(db, "users")
     end
   end
 
   describe "write/4 and read/3" do
     test "writes and reads a key-value pair", %{db: db} do
-      Uniops.Storage.OrderedTable.ensure(db, "users")
-      assert :ok = Uniops.Storage.OrderedTable.write(db, "users", "alice", "{'name':'Alice'}")
-      assert {:ok, "{'name':'Alice'}"} = Uniops.Storage.OrderedTable.read(db, "users", "alice")
+      Unex.Storage.OrderedTable.ensure(db, "users")
+      assert :ok = Unex.Storage.OrderedTable.write(db, "users", "alice", "{'name':'Alice'}")
+      assert {:ok, "{'name':'Alice'}"} = Unex.Storage.OrderedTable.read(db, "users", "alice")
     end
 
     test "returns :not_found for missing key", %{db: db} do
-      Uniops.Storage.OrderedTable.ensure(db, "users")
-      assert :not_found = Uniops.Storage.OrderedTable.read(db, "users", "nobody")
+      Unex.Storage.OrderedTable.ensure(db, "users")
+      assert :not_found = Unex.Storage.OrderedTable.read(db, "users", "nobody")
     end
 
     test "overwrites existing key", %{db: db} do
-      Uniops.Storage.OrderedTable.ensure(db, "users")
-      Uniops.Storage.OrderedTable.write(db, "users", "alice", "v1")
-      Uniops.Storage.OrderedTable.write(db, "users", "alice", "v2")
-      assert {:ok, "v2"} = Uniops.Storage.OrderedTable.read(db, "users", "alice")
+      Unex.Storage.OrderedTable.ensure(db, "users")
+      Unex.Storage.OrderedTable.write(db, "users", "alice", "v1")
+      Unex.Storage.OrderedTable.write(db, "users", "alice", "v2")
+      assert {:ok, "v2"} = Unex.Storage.OrderedTable.read(db, "users", "alice")
     end
   end
 
   describe "delete/3" do
     test "removes a key", %{db: db} do
-      Uniops.Storage.OrderedTable.ensure(db, "users")
-      Uniops.Storage.OrderedTable.write(db, "users", "alice", "data")
-      assert :ok = Uniops.Storage.OrderedTable.delete(db, "users", "alice")
-      assert :not_found = Uniops.Storage.OrderedTable.read(db, "users", "alice")
+      Unex.Storage.OrderedTable.ensure(db, "users")
+      Unex.Storage.OrderedTable.write(db, "users", "alice", "data")
+      assert :ok = Unex.Storage.OrderedTable.delete(db, "users", "alice")
+      assert :not_found = Unex.Storage.OrderedTable.read(db, "users", "alice")
     end
   end
 
   describe "scan/4" do
     test "returns key-value pairs in sorted order within a range", %{db: db} do
-      Uniops.Storage.OrderedTable.ensure(db, "scores")
-      Uniops.Storage.OrderedTable.write(db, "scores", "alice", "90")
-      Uniops.Storage.OrderedTable.write(db, "scores", "bob", "85")
-      Uniops.Storage.OrderedTable.write(db, "scores", "carol", "95")
-      Uniops.Storage.OrderedTable.write(db, "scores", "dave", "88")
+      Unex.Storage.OrderedTable.ensure(db, "scores")
+      Unex.Storage.OrderedTable.write(db, "scores", "alice", "90")
+      Unex.Storage.OrderedTable.write(db, "scores", "bob", "85")
+      Unex.Storage.OrderedTable.write(db, "scores", "carol", "95")
+      Unex.Storage.OrderedTable.write(db, "scores", "dave", "88")
 
-      result = Uniops.Storage.OrderedTable.scan(db, "scores", "bob", "dave")
+      result = Unex.Storage.OrderedTable.scan(db, "scores", "bob", "dave")
       assert result == [{"bob", "85"}, {"carol", "95"}, {"dave", "88"}]
     end
 
     test "returns empty list when range has no matches", %{db: db} do
-      Uniops.Storage.OrderedTable.ensure(db, "empty")
-      assert [] = Uniops.Storage.OrderedTable.scan(db, "empty", "a", "z")
+      Unex.Storage.OrderedTable.ensure(db, "empty")
+      assert [] = Unex.Storage.OrderedTable.scan(db, "empty", "a", "z")
     end
   end
 end
@@ -449,15 +449,15 @@ end
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `mix test test/uniops/storage/ordered_table_test.exs`
-Expected: FAIL — `Uniops.Storage.OrderedTable` not found
+Run: `mix test test/unex/storage/ordered_table_test.exs`
+Expected: FAIL — `Unex.Storage.OrderedTable` not found
 
 - [ ] **Step 3: Implement OrderedTable**
 
-Create `lib/uniops/storage/ordered_table.ex`:
+Create `lib/unex/storage/ordered_table.ex`:
 
 ```elixir
-defmodule Uniops.Storage.OrderedTable do
+defmodule Unex.Storage.OrderedTable do
   @moduledoc """
   Sorted key-value store backed by a Mnesia ordered_set table.
   Keys are sorted lexicographically, enabling range scans.
@@ -549,14 +549,14 @@ defmodule Uniops.Storage.OrderedTable do
   Returns the Mnesia table atom for a db+table combination.
   """
   def table_name(db, table) do
-    :"uniops_ot_#{db}_#{table}"
+    :"unex_ot_#{db}_#{table}"
   end
 end
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `mix test test/uniops/storage/ordered_table_test.exs`
+Run: `mix test test/unex/storage/ordered_table_test.exs`
 Expected: 7 tests, 0 failures
 
 Note: The `scan_range` implementation uses `mnesia:select` with match specifications for range queries. If the match spec syntax causes issues, an alternative is to iterate with `mnesia:next` starting from `from` until past `to`. Debug and adjust if needed.
@@ -573,24 +573,24 @@ jj new
 ### Task 5: Cell
 
 **Files:**
-- Create: `lib/uniops/storage/cell.ex`
-- Create: `test/uniops/storage/cell_test.exs`
+- Create: `lib/unex/storage/cell.ex`
+- Create: `test/unex/storage/cell_test.exs`
 
 A Cell stores a single durable value per name within a database. Backed by a Mnesia set table shared across all cells in a database.
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `test/uniops/storage/cell_test.exs`:
+Create `test/unex/storage/cell_test.exs`:
 
 ```elixir
-defmodule Uniops.Storage.CellTest do
+defmodule Unex.Storage.CellTest do
   use ExUnit.Case, async: false
 
   setup do
-    dir = Path.join(System.tmp_dir!(), "uniops_cell_test_#{System.unique_integer([:positive])}")
+    dir = Path.join(System.tmp_dir!(), "unex_cell_test_#{System.unique_integer([:positive])}")
     File.mkdir_p!(dir)
-    Uniops.Storage.Schema.init(dir)
-    Uniops.Storage.Database.create("testdb")
+    Unex.Storage.Schema.init(dir)
+    Unex.Storage.Database.create("testdb")
     on_exit(fn ->
       :mnesia.stop()
       File.rm_rf!(dir)
@@ -600,18 +600,18 @@ defmodule Uniops.Storage.CellTest do
 
   describe "write/3 and read/2" do
     test "writes and reads a cell value", %{db: db} do
-      assert :ok = Uniops.Storage.Cell.write(db, "counter", "42")
-      assert {:ok, "42"} = Uniops.Storage.Cell.read(db, "counter")
+      assert :ok = Unex.Storage.Cell.write(db, "counter", "42")
+      assert {:ok, "42"} = Unex.Storage.Cell.read(db, "counter")
     end
 
     test "returns :not_found for unset cell", %{db: db} do
-      assert :not_found = Uniops.Storage.Cell.read(db, "missing")
+      assert :not_found = Unex.Storage.Cell.read(db, "missing")
     end
 
     test "overwrites existing cell value", %{db: db} do
-      Uniops.Storage.Cell.write(db, "counter", "1")
-      Uniops.Storage.Cell.write(db, "counter", "2")
-      assert {:ok, "2"} = Uniops.Storage.Cell.read(db, "counter")
+      Unex.Storage.Cell.write(db, "counter", "1")
+      Unex.Storage.Cell.write(db, "counter", "2")
+      assert {:ok, "2"} = Unex.Storage.Cell.read(db, "counter")
     end
   end
 end
@@ -619,15 +619,15 @@ end
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `mix test test/uniops/storage/cell_test.exs`
-Expected: FAIL — `Uniops.Storage.Cell` not found
+Run: `mix test test/unex/storage/cell_test.exs`
+Expected: FAIL — `Unex.Storage.Cell` not found
 
 - [ ] **Step 3: Implement Cell**
 
-Create `lib/uniops/storage/cell.ex`:
+Create `lib/unex/storage/cell.ex`:
 
 ```elixir
-defmodule Uniops.Storage.Cell do
+defmodule Unex.Storage.Cell do
   @moduledoc """
   Single durable value store. Each cell is identified by a database + name.
   All cells in a database share one Mnesia table.
@@ -678,13 +678,13 @@ defmodule Uniops.Storage.Cell do
   end
 
   @doc false
-  def table_name(db), do: :"uniops_cells_#{db}"
+  def table_name(db), do: :"unex_cells_#{db}"
 end
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `mix test test/uniops/storage/cell_test.exs`
+Run: `mix test test/unex/storage/cell_test.exs`
 Expected: 3 tests, 0 failures
 
 - [ ] **Step 5: Commit**
@@ -699,25 +699,25 @@ jj new
 ### Task 6: Transactions
 
 **Files:**
-- Create: `lib/uniops/storage/transaction.ex`
-- Create: `test/uniops/storage/transaction_test.exs`
+- Create: `lib/unex/storage/transaction.ex`
+- Create: `test/unex/storage/transaction_test.exs`
 
 Transactions execute a batch of storage operations atomically — all succeed or all fail. This wraps multiple OrderedTable and Cell operations in a single Mnesia transaction.
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `test/uniops/storage/transaction_test.exs`:
+Create `test/unex/storage/transaction_test.exs`:
 
 ```elixir
-defmodule Uniops.Storage.TransactionTest do
+defmodule Unex.Storage.TransactionTest do
   use ExUnit.Case, async: false
 
   setup do
-    dir = Path.join(System.tmp_dir!(), "uniops_tx_test_#{System.unique_integer([:positive])}")
+    dir = Path.join(System.tmp_dir!(), "unex_tx_test_#{System.unique_integer([:positive])}")
     File.mkdir_p!(dir)
-    Uniops.Storage.Schema.init(dir)
-    Uniops.Storage.Database.create("testdb")
-    Uniops.Storage.OrderedTable.ensure("testdb", "accounts")
+    Unex.Storage.Schema.init(dir)
+    Unex.Storage.Database.create("testdb")
+    Unex.Storage.OrderedTable.ensure("testdb", "accounts")
     on_exit(fn ->
       :mnesia.stop()
       File.rm_rf!(dir)
@@ -733,15 +733,15 @@ defmodule Uniops.Storage.TransactionTest do
         {:write_cell, "total", "300"}
       ]
 
-      assert :ok = Uniops.Storage.Transaction.execute(db, ops)
-      assert {:ok, "100"} = Uniops.Storage.OrderedTable.read(db, "accounts", "alice")
-      assert {:ok, "200"} = Uniops.Storage.OrderedTable.read(db, "accounts", "bob")
-      assert {:ok, "300"} = Uniops.Storage.Cell.read(db, "total")
+      assert :ok = Unex.Storage.Transaction.execute(db, ops)
+      assert {:ok, "100"} = Unex.Storage.OrderedTable.read(db, "accounts", "alice")
+      assert {:ok, "200"} = Unex.Storage.OrderedTable.read(db, "accounts", "bob")
+      assert {:ok, "300"} = Unex.Storage.Cell.read(db, "total")
     end
 
     test "rolls back all operations on failure", %{db: db} do
       # Write initial value
-      Uniops.Storage.OrderedTable.write(db, "accounts", "alice", "100")
+      Unex.Storage.OrderedTable.write(db, "accounts", "alice", "100")
 
       ops = [
         {:write_table, "accounts", "alice", "999"},
@@ -749,9 +749,9 @@ defmodule Uniops.Storage.TransactionTest do
         {:invalid_op, "bad"}
       ]
 
-      assert {:error, _reason} = Uniops.Storage.Transaction.execute(db, ops)
+      assert {:error, _reason} = Unex.Storage.Transaction.execute(db, ops)
       # alice should still have original value — transaction rolled back
-      assert {:ok, "100"} = Uniops.Storage.OrderedTable.read(db, "accounts", "alice")
+      assert {:ok, "100"} = Unex.Storage.OrderedTable.read(db, "accounts", "alice")
     end
 
     test "supports mixed table and cell operations", %{db: db} do
@@ -761,9 +761,9 @@ defmodule Uniops.Storage.TransactionTest do
         {:delete_table, "accounts", "carol"}
       ]
 
-      assert :ok = Uniops.Storage.Transaction.execute(db, ops)
-      assert :not_found = Uniops.Storage.OrderedTable.read(db, "accounts", "carol")
-      assert {:ok, "2026-04-04"} = Uniops.Storage.Cell.read(db, "last_updated")
+      assert :ok = Unex.Storage.Transaction.execute(db, ops)
+      assert :not_found = Unex.Storage.OrderedTable.read(db, "accounts", "carol")
+      assert {:ok, "2026-04-04"} = Unex.Storage.Cell.read(db, "last_updated")
     end
   end
 end
@@ -771,15 +771,15 @@ end
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `mix test test/uniops/storage/transaction_test.exs`
-Expected: FAIL — `Uniops.Storage.Transaction` not found
+Run: `mix test test/unex/storage/transaction_test.exs`
+Expected: FAIL — `Unex.Storage.Transaction` not found
 
 - [ ] **Step 3: Implement Transaction**
 
-Create `lib/uniops/storage/transaction.ex`:
+Create `lib/unex/storage/transaction.ex`:
 
 ```elixir
-defmodule Uniops.Storage.Transaction do
+defmodule Unex.Storage.Transaction do
   @moduledoc """
   Executes a batch of storage operations atomically using Mnesia transactions.
   All operations succeed together or all are rolled back.
@@ -810,27 +810,27 @@ defmodule Uniops.Storage.Transaction do
   end
 
   defp execute_op(db, {:write_table, table, key, value}) do
-    tab = Uniops.Storage.OrderedTable.table_name(db, table)
+    tab = Unex.Storage.OrderedTable.table_name(db, table)
     :mnesia.write({tab, key, value})
   end
 
   defp execute_op(db, {:read_table, table, key}) do
-    tab = Uniops.Storage.OrderedTable.table_name(db, table)
+    tab = Unex.Storage.OrderedTable.table_name(db, table)
     :mnesia.read(tab, key)
   end
 
   defp execute_op(db, {:delete_table, table, key}) do
-    tab = Uniops.Storage.OrderedTable.table_name(db, table)
+    tab = Unex.Storage.OrderedTable.table_name(db, table)
     :mnesia.delete({tab, key})
   end
 
   defp execute_op(db, {:write_cell, name, value}) do
-    tab = Uniops.Storage.Cell.table_name(db)
+    tab = Unex.Storage.Cell.table_name(db)
     :mnesia.write({tab, name, value})
   end
 
   defp execute_op(db, {:read_cell, name}) do
-    tab = Uniops.Storage.Cell.table_name(db)
+    tab = Unex.Storage.Cell.table_name(db)
     :mnesia.read(tab, name)
   end
 
@@ -842,7 +842,7 @@ end
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `mix test test/uniops/storage/transaction_test.exs`
+Run: `mix test test/unex/storage/transaction_test.exs`
 Expected: 3 tests, 0 failures
 
 - [ ] **Step 5: Commit**
@@ -857,24 +857,24 @@ jj new
 ### Task 7: JSON Request/Response Helpers
 
 **Files:**
-- Create: `lib/uniops/api/json.ex`
-- Create: `test/uniops/api/json_test.exs`
+- Create: `lib/unex/api/json.ex`
+- Create: `test/unex/api/json_test.exs`
 
 Shared helpers for reading JSON request bodies and sending JSON responses in Plug handlers.
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `test/uniops/api/json_test.exs`:
+Create `test/unex/api/json_test.exs`:
 
 ```elixir
-defmodule Uniops.API.JsonTest do
+defmodule Unex.API.JsonTest do
   use ExUnit.Case, async: true
   use Plug.Test
 
   describe "send_json/3" do
     test "sends a JSON response with correct content type" do
       conn = conn(:get, "/test")
-      conn = Uniops.API.Json.send_json(conn, 200, %{status: "ok"})
+      conn = Unex.API.Json.send_json(conn, 200, %{status: "ok"})
       assert conn.status == 200
       assert get_resp_header(conn, "content-type") == ["application/json; charset=utf-8"]
       assert Jason.decode!(conn.resp_body) == %{"status" => "ok"}
@@ -886,7 +886,7 @@ defmodule Uniops.API.JsonTest do
       conn = conn(:post, "/test", Jason.encode!(%{key: "val"}))
       conn = put_req_header(conn, "content-type", "application/json")
       conn = Plug.Parsers.call(conn, Plug.Parsers.init(parsers: [:json], json_decoder: Jason))
-      assert {:ok, %{"key" => "val"}} = Uniops.API.Json.read_json(conn)
+      assert {:ok, %{"key" => "val"}} = Unex.API.Json.read_json(conn)
     end
   end
 end
@@ -894,15 +894,15 @@ end
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `mix test test/uniops/api/json_test.exs`
-Expected: FAIL — `Uniops.API.Json` not found
+Run: `mix test test/unex/api/json_test.exs`
+Expected: FAIL — `Unex.API.Json` not found
 
 - [ ] **Step 3: Implement JSON helpers**
 
-Create `lib/uniops/api/json.ex`:
+Create `lib/unex/api/json.ex`:
 
 ```elixir
-defmodule Uniops.API.Json do
+defmodule Unex.API.Json do
   @moduledoc """
   Shared JSON request/response helpers for Plug controllers.
   """
@@ -933,7 +933,7 @@ end
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `mix test test/uniops/api/json_test.exs`
+Run: `mix test test/unex/api/json_test.exs`
 Expected: 2 tests, 0 failures
 
 - [ ] **Step 5: Commit**
@@ -948,13 +948,13 @@ jj new
 ### Task 8: HTTP API Router and Controllers
 
 **Files:**
-- Create: `lib/uniops/api/router.ex`
-- Create: `lib/uniops/api/database_controller.ex`
-- Create: `lib/uniops/api/ordered_table_controller.ex`
-- Create: `lib/uniops/api/cell_controller.ex`
-- Create: `lib/uniops/api/transaction_controller.ex`
-- Create: `test/uniops/api/router_test.exs`
-- Modify: `lib/uniops/application.ex`
+- Create: `lib/unex/api/router.ex`
+- Create: `lib/unex/api/database_controller.ex`
+- Create: `lib/unex/api/ordered_table_controller.ex`
+- Create: `lib/unex/api/cell_controller.ex`
+- Create: `lib/unex/api/transaction_controller.ex`
+- Create: `test/unex/api/router_test.exs`
+- Modify: `lib/unex/application.ex`
 
 The HTTP API router dispatches requests to controllers. The API endpoints are:
 
@@ -974,17 +974,17 @@ GET    /health                                 → health check
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `test/uniops/api/router_test.exs`:
+Create `test/unex/api/router_test.exs`:
 
 ```elixir
-defmodule Uniops.API.RouterTest do
+defmodule Unex.API.RouterTest do
   use ExUnit.Case, async: false
   use Plug.Test
 
   setup_all do
-    dir = Path.join(System.tmp_dir!(), "uniops_api_test_#{System.unique_integer([:positive])}")
+    dir = Path.join(System.tmp_dir!(), "unex_api_test_#{System.unique_integer([:positive])}")
     File.mkdir_p!(dir)
-    Uniops.Storage.Schema.init(dir)
+    Unex.Storage.Schema.init(dir)
     on_exit(fn ->
       :mnesia.stop()
       File.rm_rf!(dir)
@@ -995,7 +995,7 @@ defmodule Uniops.API.RouterTest do
   defp call(conn) do
     conn
     |> put_req_header("content-type", "application/json")
-    |> Uniops.API.Router.call(Uniops.API.Router.init([]))
+    |> Unex.API.Router.call(Unex.API.Router.init([]))
   end
 
   describe "GET /health" do
@@ -1109,17 +1109,17 @@ end
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `mix test test/uniops/api/router_test.exs`
+Run: `mix test test/unex/api/router_test.exs`
 Expected: FAIL — modules not found
 
 - [ ] **Step 3: Implement the router**
 
-Create `lib/uniops/api/router.ex`:
+Create `lib/unex/api/router.ex`:
 
 ```elixir
-defmodule Uniops.API.Router do
+defmodule Unex.API.Router do
   @moduledoc """
-  HTTP API router for Uniops storage operations.
+  HTTP API router for Unex storage operations.
   """
 
   use Plug.Router
@@ -1133,69 +1133,69 @@ defmodule Uniops.API.Router do
   plug :dispatch
 
   get "/health" do
-    Uniops.API.Json.send_json(conn, 200, %{status: "ok"})
+    Unex.API.Json.send_json(conn, 200, %{status: "ok"})
   end
 
   # Database endpoints
   post "/databases" do
-    Uniops.API.DatabaseController.create(conn)
+    Unex.API.DatabaseController.create(conn)
   end
 
   get "/databases" do
-    Uniops.API.DatabaseController.list(conn)
+    Unex.API.DatabaseController.list(conn)
   end
 
   # OrderedTable endpoints
   post "/databases/:db/tables/:table" do
-    Uniops.API.OrderedTableController.ensure(conn, db, table)
+    Unex.API.OrderedTableController.ensure(conn, db, table)
   end
 
   post "/databases/:db/tables/:table/write" do
-    Uniops.API.OrderedTableController.write(conn, db, table)
+    Unex.API.OrderedTableController.write(conn, db, table)
   end
 
   get "/databases/:db/tables/:table/read/:key" do
-    Uniops.API.OrderedTableController.read(conn, db, table, key)
+    Unex.API.OrderedTableController.read(conn, db, table, key)
   end
 
   delete "/databases/:db/tables/:table/delete/:key" do
-    Uniops.API.OrderedTableController.delete(conn, db, table, key)
+    Unex.API.OrderedTableController.delete(conn, db, table, key)
   end
 
   post "/databases/:db/tables/:table/scan" do
-    Uniops.API.OrderedTableController.scan(conn, db, table)
+    Unex.API.OrderedTableController.scan(conn, db, table)
   end
 
   # Cell endpoints
   post "/databases/:db/cells/:name/write" do
-    Uniops.API.CellController.write(conn, db, name)
+    Unex.API.CellController.write(conn, db, name)
   end
 
   get "/databases/:db/cells/:name/read" do
-    Uniops.API.CellController.read(conn, db, name)
+    Unex.API.CellController.read(conn, db, name)
   end
 
   # Transaction endpoint
   post "/databases/:db/tx" do
-    Uniops.API.TransactionController.execute(conn, db)
+    Unex.API.TransactionController.execute(conn, db)
   end
 
   match _ do
-    Uniops.API.Json.send_json(conn, 404, %{error: "not_found"})
+    Unex.API.Json.send_json(conn, 404, %{error: "not_found"})
   end
 end
 ```
 
 - [ ] **Step 4: Implement the controllers**
 
-Create `lib/uniops/api/database_controller.ex`:
+Create `lib/unex/api/database_controller.ex`:
 
 ```elixir
-defmodule Uniops.API.DatabaseController do
+defmodule Unex.API.DatabaseController do
   @moduledoc false
 
-  alias Uniops.API.Json
-  alias Uniops.Storage.Database
+  alias Unex.API.Json
+  alias Unex.Storage.Database
 
   def create(conn) do
     {:ok, %{"name" => name}} = Json.read_json(conn)
@@ -1213,14 +1213,14 @@ defmodule Uniops.API.DatabaseController do
 end
 ```
 
-Create `lib/uniops/api/ordered_table_controller.ex`:
+Create `lib/unex/api/ordered_table_controller.ex`:
 
 ```elixir
-defmodule Uniops.API.OrderedTableController do
+defmodule Unex.API.OrderedTableController do
   @moduledoc false
 
-  alias Uniops.API.Json
-  alias Uniops.Storage.OrderedTable
+  alias Unex.API.Json
+  alias Unex.Storage.OrderedTable
 
   def ensure(conn, db, table) do
     case OrderedTable.ensure(db, table) do
@@ -1256,14 +1256,14 @@ defmodule Uniops.API.OrderedTableController do
 end
 ```
 
-Create `lib/uniops/api/cell_controller.ex`:
+Create `lib/unex/api/cell_controller.ex`:
 
 ```elixir
-defmodule Uniops.API.CellController do
+defmodule Unex.API.CellController do
   @moduledoc false
 
-  alias Uniops.API.Json
-  alias Uniops.Storage.Cell
+  alias Unex.API.Json
+  alias Unex.Storage.Cell
 
   def write(conn, db, name) do
     {:ok, %{"value" => value}} = Json.read_json(conn)
@@ -1280,14 +1280,14 @@ defmodule Uniops.API.CellController do
 end
 ```
 
-Create `lib/uniops/api/transaction_controller.ex`:
+Create `lib/unex/api/transaction_controller.ex`:
 
 ```elixir
-defmodule Uniops.API.TransactionController do
+defmodule Unex.API.TransactionController do
   @moduledoc false
 
-  alias Uniops.API.Json
-  alias Uniops.Storage.Transaction
+  alias Unex.API.Json
+  alias Unex.Storage.Transaction
 
   def execute(conn, db) do
     {:ok, %{"operations" => raw_ops}} = Json.read_json(conn)
@@ -1319,28 +1319,28 @@ end
 
 - [ ] **Step 5: Add Bandit HTTP server to the supervision tree**
 
-Update `lib/uniops/application.ex`:
+Update `lib/unex/application.ex`:
 
 ```elixir
-defmodule Uniops.Application do
+defmodule Unex.Application do
   @moduledoc false
 
   use Application
 
   @impl true
   def start(_type, _args) do
-    port = Application.get_env(:uniops, :api_port, 4040)
-    mnesia_dir = Application.get_env(:uniops, :mnesia_dir)
+    port = Application.get_env(:unex, :api_port, 4040)
+    mnesia_dir = Application.get_env(:unex, :mnesia_dir)
 
     if mnesia_dir do
-      Uniops.Storage.Schema.init(mnesia_dir)
+      Unex.Storage.Schema.init(mnesia_dir)
     end
 
     children = [
-      {Bandit, plug: Uniops.API.Router, port: port}
+      {Bandit, plug: Unex.API.Router, port: port}
     ]
 
-    opts = [strategy: :one_for_one, name: Uniops.Supervisor]
+    opts = [strategy: :one_for_one, name: Unex.Supervisor]
     Supervisor.start_link(children, opts)
   end
 end
@@ -1348,7 +1348,7 @@ end
 
 - [ ] **Step 6: Run the router tests**
 
-Run: `mix test test/uniops/api/router_test.exs`
+Run: `mix test test/unex/api/router_test.exs`
 Expected: 6 tests, 0 failures
 
 Note: The router tests call the Plug directly (no HTTP server needed) via `Plug.Test`. The Bandit server is for actual runtime, not tests.
@@ -1362,15 +1362,15 @@ Note: The Application module now starts Bandit and inits Mnesia. Existing tests 
 
 ```elixir
 # Only start the API server when configured
-config :uniops, start_api: true
+config :unex, start_api: true
 ```
 
-And guard the Bandit child in application.ex with `if Application.get_env(:uniops, :start_api, false)`. For tests, set this in `config/test.exs` or use `setup` to manage it.
+And guard the Bandit child in application.ex with `if Application.get_env(:unex, :start_api, false)`. For tests, set this in `config/test.exs` or use `setup` to manage it.
 
 If this becomes an issue, create `config/test.exs` with:
 ```elixir
 import Config
-config :uniops, start_api: false, mnesia_dir: nil
+config :unex, start_api: false, mnesia_dir: nil
 ```
 
 And add `import_config "#{config_env()}.exs"` at the end of `config/config.exs`.
@@ -1396,19 +1396,19 @@ The ultimate proof: a Unison program uses `@unison/http` to call our storage API
 Create `test/integration/unison_storage_test.exs`:
 
 ```elixir
-defmodule Uniops.Integration.UnisonStorageTest do
+defmodule Unex.Integration.UnisonStorageTest do
   use ExUnit.Case, async: false
 
   @api_port 4041
 
   setup_all do
     # Start Mnesia
-    dir = Path.join(System.tmp_dir!(), "uniops_e2e_#{System.unique_integer([:positive])}")
+    dir = Path.join(System.tmp_dir!(), "unex_e2e_#{System.unique_integer([:positive])}")
     File.mkdir_p!(dir)
-    Uniops.Storage.Schema.init(dir)
+    Unex.Storage.Schema.init(dir)
 
     # Start HTTP server on a test port
-    {:ok, server} = Bandit.start_link(plug: Uniops.API.Router, port: @api_port)
+    {:ok, server} = Bandit.start_link(plug: Unex.API.Router, port: @api_port)
 
     on_exit(fn ->
       GenServer.stop(server)
@@ -1461,7 +1461,7 @@ defmodule Uniops.Integration.UnisonStorageTest do
       printLine ("RESULT: " ++ body)
     """
 
-    assert {:ok, result} = Uniops.eval(source)
+    assert {:ok, result} = Unex.eval(source)
     assert result.stdout =~ "RESULT:"
     assert result.stdout =~ "world"
   end
@@ -1471,22 +1471,22 @@ end
 **IMPORTANT:** The Unison HTTP API calls above are approximate. The exact function names and types in `@unison/http` may differ. If the test fails due to Unison typecheck errors:
 
 1. Check the actual API by running `ucm` interactively and typing `find Http.Request` or `view Http.Request.post` to see the real signatures.
-2. The workspace created by `Uniops.eval` needs `@unison/http` installed. You may need to modify `Uniops.Workspace.init_codebase` to also run `lib.install @unison/http` during project creation.
+2. The workspace created by `Unex.eval` needs `@unison/http` installed. You may need to modify `Unex.Workspace.init_codebase` to also run `lib.install @unison/http` during project creation.
 3. Simpler alternative if HTTP lib is tricky: use the `IO` ability with raw TCP sockets, or use `printLine` to output results and skip HTTP entirely for v1.
 
 If the exact Unison HTTP API proves too complex to get right in this plan, **a valid fallback** is to test the HTTP API from Elixir only (which the router_test already does) and write a simpler Unison test that just verifies Unison code can make HTTP calls at all. The important thing is that the storage backend and HTTP API work.
 
 - [ ] **Step 2: Install @unison/http in the workspace**
 
-If the test fails because `Http` types are not found, modify `lib/uniops/workspace.ex` `init_codebase` to install the HTTP library:
+If the test fails because `Http` types are not found, modify `lib/unex/workspace.ex` `init_codebase` to install the HTTP library:
 
 Change the commands sent to UCM from:
 ```
-"project.create uniops_base\nexit\n"
+"project.create unex_base\nexit\n"
 ```
 to:
 ```
-"project.create uniops_base\nlib.install @unison/http\nexit\n"
+"project.create unex_base\nlib.install @unison/http\nexit\n"
 ```
 
 This adds a one-time download of the HTTP library when creating workspaces. It will make workspace creation slower but ensures Unison programs can make HTTP calls.

@@ -1,16 +1,16 @@
-defmodule Uniops.Integration.ServicesClusterTest do
+defmodule Unex.Integration.ServicesClusterTest do
   use ExUnit.Case, async: false
 
-  alias Uniops.Cluster.HashCache
-  alias Uniops.Cluster.SyncServer
-  alias Uniops.Services
-  alias Uniops.Services.Registry
+  alias Unex.Cluster.HashCache
+  alias Unex.Cluster.SyncServer
+  alias Unex.Services
+  alias Unex.Services.Registry
 
   @moduletag timeout: 300_000
 
   setup_all do
     unless Node.alive?() do
-      {:ok, _} = :net_kernel.start([:uniops_svc_test, :shortnames])
+      {:ok, _} = :net_kernel.start([:unex_svc_test, :shortnames])
     end
 
     :ok

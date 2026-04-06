@@ -1,7 +1,7 @@
 import Config
 
 # Tests manage their own Mnesia and API instances — don't auto-start anything
-config :uniops,
+config :unex,
   start_api: false,
   mnesia_dir: nil,
   blobs_dir: nil,

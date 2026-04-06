@@ -1,0 +1,23 @@
+-- Unex Remote Ability
+-- Execute compiled Unison bytecode on remote nodes.
+
+
+unique ability Unex.Remote where
+  execute : Text -> Text
+  submit : Text -> Text
+
+Unex.Remote.handler : Text -> Request {Unex.Remote} a -> {IO, Exception, Http, Threads} a
+Unex.Remote.handler baseUrl = cases
+  { Unex.Remote.execute hash -> k } ->
+    body = bodyText (Unex.Http.postJson
+          (baseUrl ++ "/remote/execute")
+          (Unex.Http.toJson [("hash", hash)]))
+    handle k body with Unex.Remote.handler baseUrl
+
+  { Unex.Remote.submit hash -> k } ->
+    body = bodyText (Unex.Http.postJson
+          (baseUrl ++ "/remote/submit")
+          (Unex.Http.toJson [("hash", hash)]))
+    handle k body with Unex.Remote.handler baseUrl
+
+  { a } -> a

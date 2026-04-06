@@ -35,13 +35,13 @@ What this plan does **not** cover:
 
 ```
 lib/
-  uniops/
+  unex/
     application.ex                # Modify: add HashCache + SyncServer to supervision tree
     cluster/
       hash_cache.ex               # ETS-backed bytecode cache — store/get/has?/list by SHA256
       sync_server.ex              # GenServer: serves hashes to peers, pulls from peers on demand
 test/
-  uniops/
+  unex/
     cluster/
       hash_cache_test.exs         # Unit tests for local cache operations
       sync_server_test.exs        # Multi-node tests using :peer
@@ -54,66 +54,66 @@ test/
 ### Task 1: Hash Cache (ETS)
 
 **Files:**
-- Create: `lib/uniops/cluster/hash_cache.ex`
-- Create: `test/uniops/cluster/hash_cache_test.exs`
+- Create: `lib/unex/cluster/hash_cache.ex`
+- Create: `test/unex/cluster/hash_cache_test.exs`
 
 The hash cache stores opaque bytecode blobs keyed by their SHA256 hash. It's a GenServer owning a named ETS table for concurrent read access.
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `test/uniops/cluster/hash_cache_test.exs`:
+Create `test/unex/cluster/hash_cache_test.exs`:
 
 ```elixir
-defmodule Uniops.Cluster.HashCacheTest do
+defmodule Unex.Cluster.HashCacheTest do
   use ExUnit.Case, async: false
 
   setup do
     # Start a fresh cache for each test
-    cache = start_supervised!({Uniops.Cluster.HashCache, name: :test_cache})
+    cache = start_supervised!({Unex.Cluster.HashCache, name: :test_cache})
     %{cache: cache}
   end
 
   describe "put/3 and get/2" do
     test "stores and retrieves bytecode by hash", %{cache: cache} do
       data = <<1, 2, 3, 4, 5>>
-      hash = Uniops.Cluster.HashCache.put(cache, data)
+      hash = Unex.Cluster.HashCache.put(cache, data)
       assert is_binary(hash)
       assert byte_size(hash) == 64  # SHA256 hex string
-      assert {:ok, ^data} = Uniops.Cluster.HashCache.get(cache, hash)
+      assert {:ok, ^data} = Unex.Cluster.HashCache.get(cache, hash)
     end
 
     test "returns :not_found for missing hash", %{cache: cache} do
-      assert :not_found = Uniops.Cluster.HashCache.get(cache, "deadbeef")
+      assert :not_found = Unex.Cluster.HashCache.get(cache, "deadbeef")
     end
 
     test "put with explicit hash", %{cache: cache} do
       data = <<"hello">>
       hash = :crypto.hash(:sha256, data) |> Base.encode16(case: :lower)
-      assert :ok = Uniops.Cluster.HashCache.put(cache, hash, data)
-      assert {:ok, ^data} = Uniops.Cluster.HashCache.get(cache, hash)
+      assert :ok = Unex.Cluster.HashCache.put(cache, hash, data)
+      assert {:ok, ^data} = Unex.Cluster.HashCache.get(cache, hash)
     end
   end
 
   describe "has?/2" do
     test "returns false for missing hash", %{cache: cache} do
-      refute Uniops.Cluster.HashCache.has?(cache, "missing")
+      refute Unex.Cluster.HashCache.has?(cache, "missing")
     end
 
     test "returns true after put", %{cache: cache} do
-      hash = Uniops.Cluster.HashCache.put(cache, <<"data">>)
-      assert Uniops.Cluster.HashCache.has?(cache, hash)
+      hash = Unex.Cluster.HashCache.put(cache, <<"data">>)
+      assert Unex.Cluster.HashCache.has?(cache, hash)
     end
   end
 
   describe "list/1" do
     test "returns empty list initially", %{cache: cache} do
-      assert [] = Uniops.Cluster.HashCache.list(cache)
+      assert [] = Unex.Cluster.HashCache.list(cache)
     end
 
     test "returns all cached hashes", %{cache: cache} do
-      h1 = Uniops.Cluster.HashCache.put(cache, <<"a">>)
-      h2 = Uniops.Cluster.HashCache.put(cache, <<"b">>)
-      hashes = Uniops.Cluster.HashCache.list(cache)
+      h1 = Unex.Cluster.HashCache.put(cache, <<"a">>)
+      h2 = Unex.Cluster.HashCache.put(cache, <<"b">>)
+      hashes = Unex.Cluster.HashCache.list(cache)
       assert h1 in hashes
       assert h2 in hashes
     end
@@ -121,7 +121,7 @@ defmodule Uniops.Cluster.HashCacheTest do
 
   describe "hash_of/1" do
     test "computes SHA256 hex" do
-      hash = Uniops.Cluster.HashCache.hash_of(<<"hello">>)
+      hash = Unex.Cluster.HashCache.hash_of(<<"hello">>)
       expected = :crypto.hash(:sha256, <<"hello">>) |> Base.encode16(case: :lower)
       assert hash == expected
     end
@@ -131,15 +131,15 @@ end
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `mix test test/uniops/cluster/hash_cache_test.exs`
+Run: `mix test test/unex/cluster/hash_cache_test.exs`
 Expected: FAIL — module not found
 
 - [ ] **Step 3: Implement HashCache**
 
-Create `lib/uniops/cluster/hash_cache.ex`:
+Create `lib/unex/cluster/hash_cache.ex`:
 
 ```elixir
-defmodule Uniops.Cluster.HashCache do
+defmodule Unex.Cluster.HashCache do
   @moduledoc """
   ETS-backed cache for Unison bytecode blobs, keyed by SHA256 content hash.
   Provides concurrent read access with sub-microsecond lookups.
@@ -230,7 +230,7 @@ end
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `mix test test/uniops/cluster/hash_cache_test.exs`
+Run: `mix test test/unex/cluster/hash_cache_test.exs`
 Expected: 7 tests, 0 failures
 
 - [ ] **Step 5: Commit**
@@ -245,8 +245,8 @@ jj new
 ### Task 2: Sync Server
 
 **Files:**
-- Create: `lib/uniops/cluster/sync_server.ex`
-- Create: `test/uniops/cluster/sync_server_test.exs`
+- Create: `lib/unex/cluster/sync_server.ex`
+- Create: `test/unex/cluster/sync_server_test.exs`
 
 The SyncServer runs on each node. It does two things:
 1. **Serves**: responds to `{:get_hash, hash}` calls from remote nodes with the bytecode
@@ -254,42 +254,42 @@ The SyncServer runs on each node. It does two things:
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `test/uniops/cluster/sync_server_test.exs`:
+Create `test/unex/cluster/sync_server_test.exs`:
 
 ```elixir
-defmodule Uniops.Cluster.SyncServerTest do
+defmodule Unex.Cluster.SyncServerTest do
   use ExUnit.Case, async: false
 
   setup do
-    cache = start_supervised!({Uniops.Cluster.HashCache, name: :sync_test_cache})
-    sync = start_supervised!({Uniops.Cluster.SyncServer, cache: :sync_test_cache, name: :sync_test_server})
+    cache = start_supervised!({Unex.Cluster.HashCache, name: :sync_test_cache})
+    sync = start_supervised!({Unex.Cluster.SyncServer, cache: :sync_test_cache, name: :sync_test_server})
     %{cache: cache, sync: sync}
   end
 
   describe "fetch_local/2" do
     test "returns bytecode from local cache", %{sync: sync, cache: cache} do
-      hash = Uniops.Cluster.HashCache.put(cache, <<"hello">>)
-      assert {:ok, <<"hello">>} = Uniops.Cluster.SyncServer.fetch_local(sync, hash)
+      hash = Unex.Cluster.HashCache.put(cache, <<"hello">>)
+      assert {:ok, <<"hello">>} = Unex.Cluster.SyncServer.fetch_local(sync, hash)
     end
 
     test "returns :not_found for missing hash", %{sync: sync} do
-      assert :not_found = Uniops.Cluster.SyncServer.fetch_local(sync, "missing")
+      assert :not_found = Unex.Cluster.SyncServer.fetch_local(sync, "missing")
     end
   end
 
   describe "resolve/2 (local only, no peers)" do
     test "resolves hashes available locally", %{sync: sync, cache: cache} do
-      h1 = Uniops.Cluster.HashCache.put(cache, <<"a">>)
-      h2 = Uniops.Cluster.HashCache.put(cache, <<"b">>)
+      h1 = Unex.Cluster.HashCache.put(cache, <<"a">>)
+      h2 = Unex.Cluster.HashCache.put(cache, <<"b">>)
 
-      assert {:ok, resolved} = Uniops.Cluster.SyncServer.resolve(sync, [h1, h2])
+      assert {:ok, resolved} = Unex.Cluster.SyncServer.resolve(sync, [h1, h2])
       assert Map.keys(resolved) |> Enum.sort() == Enum.sort([h1, h2])
     end
 
     test "returns error with missing hashes when not available anywhere", %{sync: sync, cache: cache} do
-      h1 = Uniops.Cluster.HashCache.put(cache, <<"a">>)
+      h1 = Unex.Cluster.HashCache.put(cache, <<"a">>)
 
-      assert {:error, {:missing, missing}} = Uniops.Cluster.SyncServer.resolve(sync, [h1, "nothere"])
+      assert {:error, {:missing, missing}} = Unex.Cluster.SyncServer.resolve(sync, [h1, "nothere"])
       assert "nothere" in missing
     end
   end
@@ -298,15 +298,15 @@ end
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `mix test test/uniops/cluster/sync_server_test.exs`
+Run: `mix test test/unex/cluster/sync_server_test.exs`
 Expected: FAIL — module not found
 
 - [ ] **Step 3: Implement SyncServer**
 
-Create `lib/uniops/cluster/sync_server.ex`:
+Create `lib/unex/cluster/sync_server.ex`:
 
 ```elixir
-defmodule Uniops.Cluster.SyncServer do
+defmodule Unex.Cluster.SyncServer do
   @moduledoc """
   Syncs bytecode hashes between cluster nodes.
 
@@ -318,7 +318,7 @@ defmodule Uniops.Cluster.SyncServer do
 
   use GenServer
 
-  alias Uniops.Cluster.HashCache
+  alias Unex.Cluster.HashCache
 
   # --- Client API ---
 
@@ -417,7 +417,7 @@ end
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `mix test test/uniops/cluster/sync_server_test.exs`
+Run: `mix test test/unex/cluster/sync_server_test.exs`
 Expected: 4 tests, 0 failures
 
 - [ ] **Step 5: Commit**
@@ -432,38 +432,38 @@ jj new
 ### Task 3: Add to Supervision Tree
 
 **Files:**
-- Modify: `lib/uniops/application.ex`
+- Modify: `lib/unex/application.ex`
 
 - [ ] **Step 1: Update application.ex to start cluster services**
 
 ```elixir
-defmodule Uniops.Application do
+defmodule Unex.Application do
   @moduledoc false
 
   use Application
 
   @impl true
   def start(_type, _args) do
-    mnesia_dir = Application.get_env(:uniops, :mnesia_dir)
-    if mnesia_dir, do: Uniops.Storage.Schema.init(mnesia_dir)
+    mnesia_dir = Application.get_env(:unex, :mnesia_dir)
+    if mnesia_dir, do: Unex.Storage.Schema.init(mnesia_dir)
 
     children =
       cluster_children() ++ api_children()
 
-    Supervisor.start_link(children, strategy: :one_for_one, name: Uniops.Supervisor)
+    Supervisor.start_link(children, strategy: :one_for_one, name: Unex.Supervisor)
   end
 
   defp cluster_children do
     [
-      Uniops.Cluster.HashCache,
-      Uniops.Cluster.SyncServer
+      Unex.Cluster.HashCache,
+      Unex.Cluster.SyncServer
     ]
   end
 
   defp api_children do
-    if Application.get_env(:uniops, :start_api, false) do
-      port = Application.get_env(:uniops, :api_port, 4040)
-      [{Bandit, plug: Uniops.API.Router, port: port}]
+    if Application.get_env(:unex, :start_api, false) do
+      port = Application.get_env(:unex, :api_port, 4040)
+      [{Bandit, plug: Unex.API.Router, port: port}]
     else
       []
     end
@@ -497,7 +497,7 @@ This is the key test — two BEAM nodes form a cluster and sync bytecode. Uses O
 Create `test/integration/cluster_sync_test.exs`:
 
 ```elixir
-defmodule Uniops.Integration.ClusterSyncTest do
+defmodule Unex.Integration.ClusterSyncTest do
   use ExUnit.Case, async: false
 
   @moduletag timeout: 60_000
@@ -509,7 +509,7 @@ defmodule Uniops.Integration.ClusterSyncTest do
         :ok
 
       false ->
-        {:ok, _pid} = :net_kernel.start([:uniops_test, :shortnames])
+        {:ok, _pid} = :net_kernel.start([:unex_test, :shortnames])
         :ok
     end
 
@@ -519,7 +519,7 @@ defmodule Uniops.Integration.ClusterSyncTest do
 
     {:ok, _pid, peer_node} =
       :peer.start_link(%{
-        name: :uniops_peer1,
+        name: :unex_peer1,
         args: List.flatten(pa_args)
       })
 
@@ -528,8 +528,8 @@ defmodule Uniops.Integration.ClusterSyncTest do
     :rpc.call(peer_node, Application, :ensure_all_started, [:logger])
 
     # Start HashCache and SyncServer on the peer
-    {:ok, _} = :rpc.call(peer_node, Uniops.Cluster.HashCache, :start_link, [[]])
-    {:ok, _} = :rpc.call(peer_node, Uniops.Cluster.SyncServer, :start_link, [[]])
+    {:ok, _} = :rpc.call(peer_node, Unex.Cluster.HashCache, :start_link, [[]])
+    {:ok, _} = :rpc.call(peer_node, Unex.Cluster.SyncServer, :start_link, [[]])
 
     on_exit(fn ->
       :peer.stop(peer_node)
@@ -541,26 +541,26 @@ defmodule Uniops.Integration.ClusterSyncTest do
   test "hash stored on this node can be fetched by peer via SyncServer", %{peer: peer} do
     # Store bytecode on this (local) node
     data = <<"compiled unison bytecode here">>
-    hash = Uniops.Cluster.HashCache.put(data)
+    hash = Unex.Cluster.HashCache.put(data)
 
     # Verify local node has it
-    assert {:ok, ^data} = Uniops.Cluster.HashCache.get(hash)
+    assert {:ok, ^data} = Unex.Cluster.HashCache.get(hash)
 
     # Verify peer does NOT have it yet
-    assert :not_found = :rpc.call(peer, Uniops.Cluster.HashCache, :get, [Uniops.Cluster.HashCache, hash])
+    assert :not_found = :rpc.call(peer, Unex.Cluster.HashCache, :get, [Unex.Cluster.HashCache, hash])
 
     # Peer resolves the hash — should pull from us
-    assert {:ok, resolved} = :rpc.call(peer, Uniops.Cluster.SyncServer, :resolve, [Uniops.Cluster.SyncServer, [hash]])
+    assert {:ok, resolved} = :rpc.call(peer, Unex.Cluster.SyncServer, :resolve, [Unex.Cluster.SyncServer, [hash]])
     assert resolved[hash] == data
 
     # Peer should now have it cached locally
-    assert {:ok, ^data} = :rpc.call(peer, Uniops.Cluster.HashCache, :get, [Uniops.Cluster.HashCache, hash])
+    assert {:ok, ^data} = :rpc.call(peer, Unex.Cluster.HashCache, :get, [Unex.Cluster.HashCache, hash])
   end
 
   test "resolve returns missing when hash is not on any node", %{peer: peer} do
     assert {:error, {:missing, ["nonexistent"]}} =
-             :rpc.call(peer, Uniops.Cluster.SyncServer, :resolve, [
-               Uniops.Cluster.SyncServer,
+             :rpc.call(peer, Unex.Cluster.SyncServer, :resolve, [
+               Unex.Cluster.SyncServer,
                ["nonexistent"]
              ])
   end
@@ -569,17 +569,17 @@ defmodule Uniops.Integration.ClusterSyncTest do
     data = <<"peer bytecode">>
 
     hash =
-      :rpc.call(peer, Uniops.Cluster.HashCache, :put, [Uniops.Cluster.HashCache, data])
+      :rpc.call(peer, Unex.Cluster.HashCache, :put, [Unex.Cluster.HashCache, data])
 
     # This node doesn't have it
-    assert :not_found = Uniops.Cluster.HashCache.get(hash)
+    assert :not_found = Unex.Cluster.HashCache.get(hash)
 
     # Resolve — should pull from peer
-    assert {:ok, resolved} = Uniops.Cluster.SyncServer.resolve([hash])
+    assert {:ok, resolved} = Unex.Cluster.SyncServer.resolve([hash])
     assert resolved[hash] == data
 
     # Now cached locally
-    assert {:ok, ^data} = Uniops.Cluster.HashCache.get(hash)
+    assert {:ok, ^data} = Unex.Cluster.HashCache.get(hash)
   end
 end
 ```
@@ -616,7 +616,7 @@ The ultimate proof for Plan 3: compile a Unison program on one node, cache it, s
 Create `test/integration/cluster_execute_test.exs`:
 
 ```elixir
-defmodule Uniops.Integration.ClusterExecuteTest do
+defmodule Unex.Integration.ClusterExecuteTest do
   use ExUnit.Case, async: false
 
   @moduletag timeout: 300_000
@@ -624,7 +624,7 @@ defmodule Uniops.Integration.ClusterExecuteTest do
   setup_all do
     # Start distributed node
     unless Node.alive?() do
-      {:ok, _} = :net_kernel.start([:uniops_exec_test, :shortnames])
+      {:ok, _} = :net_kernel.start([:unex_exec_test, :shortnames])
     end
 
     # Start peer
@@ -633,14 +633,14 @@ defmodule Uniops.Integration.ClusterExecuteTest do
 
     {:ok, _pid, peer_node} =
       :peer.start_link(%{
-        name: :uniops_exec_peer,
+        name: :unex_exec_peer,
         args: List.flatten(pa_args)
       })
 
     :rpc.call(peer_node, Application, :ensure_all_started, [:crypto])
     :rpc.call(peer_node, Application, :ensure_all_started, [:logger])
-    {:ok, _} = :rpc.call(peer_node, Uniops.Cluster.HashCache, :start_link, [[]])
-    {:ok, _} = :rpc.call(peer_node, Uniops.Cluster.SyncServer, :start_link, [[]])
+    {:ok, _} = :rpc.call(peer_node, Unex.Cluster.HashCache, :start_link, [[]])
+    {:ok, _} = :rpc.call(peer_node, Unex.Cluster.SyncServer, :start_link, [[]])
 
     on_exit(fn -> :peer.stop(peer_node) end)
 
@@ -654,19 +654,19 @@ defmodule Uniops.Integration.ClusterExecuteTest do
     main = do printLine "synced-and-executed"
     """
 
-    dir = Path.join(System.tmp_dir!(), "uniops_cluster_exec_#{System.unique_integer([:positive])}")
-    {:ok, workspace} = Uniops.Workspace.create(dir)
-    {:ok, file_path} = Uniops.Workspace.write_source(workspace, "program.u", source)
-    {:ok, uc_path} = Uniops.Compiler.compile(workspace, file_path, "main", "program")
+    dir = Path.join(System.tmp_dir!(), "unex_cluster_exec_#{System.unique_integer([:positive])}")
+    {:ok, workspace} = Unex.Workspace.create(dir)
+    {:ok, file_path} = Unex.Workspace.write_source(workspace, "program.u", source)
+    {:ok, uc_path} = Unex.Compiler.compile(workspace, file_path, "main", "program")
 
     # Step 2: Read the .uc bytecode and cache it locally
     uc_bytes = File.read!(uc_path)
-    hash = Uniops.Cluster.HashCache.put(uc_bytes)
+    hash = Unex.Cluster.HashCache.put(uc_bytes)
 
     # Step 3: Peer resolves the hash (pulls from us)
     {:ok, _resolved} =
-      :rpc.call(peer, Uniops.Cluster.SyncServer, :resolve, [
-        Uniops.Cluster.SyncServer,
+      :rpc.call(peer, Unex.Cluster.SyncServer, :resolve, [
+        Unex.Cluster.SyncServer,
         [hash]
       ])
 
@@ -674,18 +674,18 @@ defmodule Uniops.Integration.ClusterExecuteTest do
     # (In a real distributed setup, the peer would write to its own filesystem.
     # Since both nodes share a filesystem in tests, we write to a temp path.)
     {:ok, synced_bytes} =
-      :rpc.call(peer, Uniops.Cluster.HashCache, :get, [Uniops.Cluster.HashCache, hash])
+      :rpc.call(peer, Unex.Cluster.HashCache, :get, [Unex.Cluster.HashCache, hash])
 
     peer_uc_path = Path.join(System.tmp_dir!(), "synced_#{hash}.uc")
     File.write!(peer_uc_path, synced_bytes)
 
     # Execute the synced bytecode
-    {:ok, result} = Uniops.Runner.run_compiled(peer_uc_path)
+    {:ok, result} = Unex.Runner.run_compiled(peer_uc_path)
     assert result.stdout =~ "synced-and-executed"
 
     # Cleanup
     File.rm(peer_uc_path)
-    Uniops.Workspace.destroy(workspace)
+    Unex.Workspace.destroy(workspace)
   end
 end
 ```
@@ -722,7 +722,7 @@ Expected: Clean compilation
 
 - [ ] **Step 3: Verify cluster tests specifically**
 
-Run: `mix test test/uniops/cluster/ test/integration/cluster_sync_test.exs test/integration/cluster_execute_test.exs --trace`
+Run: `mix test test/unex/cluster/ test/integration/cluster_sync_test.exs test/integration/cluster_execute_test.exs --trace`
 Expected: All cluster tests pass
 
 - [ ] **Step 4: Commit final state**

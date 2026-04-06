@@ -1,10 +1,10 @@
-defmodule Uniops.Integration.UnisonExamplesTest do
+defmodule Unex.Integration.UnisonExamplesTest do
   @moduledoc """
   End-to-end tests: verify that the example .u programs in unison/Examples/
-  compile and run correctly against a live Uniops server.
+  compile and run correctly against a live Unex server.
 
   Each test concatenates the full Unison ability library + an example program
-  into a single source string, substitutes the test port, and runs via Uniops.eval.
+  into a single source string, substitutes the test port, and runs via Unex.eval.
   """
   use ExUnit.Case, async: false
 
@@ -14,13 +14,13 @@ defmodule Uniops.Integration.UnisonExamplesTest do
     mnesia_dir =
       Path.join(
         System.tmp_dir!(),
-        "uniops_examples_test_#{:erlang.unique_integer([:positive])}"
+        "unex_examples_test_#{:erlang.unique_integer([:positive])}"
       )
 
     File.mkdir_p!(mnesia_dir)
-    Uniops.Storage.Schema.init(mnesia_dir)
+    Unex.Storage.Schema.init(mnesia_dir)
 
-    {:ok, bandit_pid} = Bandit.start_link(plug: Uniops.API.Router, port: @test_port)
+    {:ok, bandit_pid} = Bandit.start_link(plug: Unex.API.Router, port: @test_port)
 
     on_exit(fn ->
       Process.exit(bandit_pid, :normal)
@@ -37,14 +37,14 @@ defmodule Uniops.Integration.UnisonExamplesTest do
     # Concatenate all library .u files in dependency order:
     # Helpers first (shared HTTP utils), then each ability, then Main combinator
     files = [
-      "unison/Uniops/Http/Helpers.u",
-      "unison/Uniops/Storage.u",
-      "unison/Uniops/Config.u",
-      "unison/Uniops/Blobs.u",
-      "unison/Uniops/Scratch.u",
-      "unison/Uniops/Log.u",
-      "unison/Uniops/Remote.u",
-      "unison/Uniops/Services.u",
+      "unison/Unex/Http/Helpers.u",
+      "unison/Unex/Storage.u",
+      "unison/Unex/Config.u",
+      "unison/Unex/Blobs.u",
+      "unison/Unex/Scratch.u",
+      "unison/Unex/Log.u",
+      "unison/Unex/Remote.u",
+      "unison/Unex/Services.u",
       "unison/Main.u"
     ]
 
@@ -69,11 +69,11 @@ defmodule Uniops.Integration.UnisonExamplesTest do
   test "BasicStorage example compiles and runs", %{port: port} do
     source = build_source("BasicStorage", port)
 
-    result = Uniops.eval(source, timeout: 300_000, entry: "Examples.BasicStorage.main")
+    result = Unex.eval(source, timeout: 300_000, entry: "Examples.BasicStorage.main")
 
     case result do
       {:ok, r} ->
-        stdout = Uniops.UCM.Output.strip_ansi(r.stdout)
+        stdout = Unex.UCM.Output.strip_ansi(r.stdout)
         assert stdout =~ "Alice:", "Expected 'Alice:' in output, got:\n#{stdout}"
         assert stdout =~ "Visitors:", "Expected 'Visitors:' in output, got:\n#{stdout}"
         assert stdout =~ "Done!", "Expected 'Done!' in output, got:\n#{stdout}"
@@ -87,11 +87,11 @@ defmodule Uniops.Integration.UnisonExamplesTest do
   test "ConfigAndSecrets example compiles and runs", %{port: port} do
     source = build_source("ConfigAndSecrets", port)
 
-    result = Uniops.eval(source, timeout: 300_000, entry: "Examples.ConfigAndSecrets.main")
+    result = Unex.eval(source, timeout: 300_000, entry: "Examples.ConfigAndSecrets.main")
 
     case result do
       {:ok, r} ->
-        stdout = Uniops.UCM.Output.strip_ansi(r.stdout)
+        stdout = Unex.UCM.Output.strip_ansi(r.stdout)
         assert stdout =~ "Prod API key:", "Expected 'Prod API key:' in output, got:\n#{stdout}"
         assert stdout =~ "Done!", "Expected 'Done!' in output, got:\n#{stdout}"
 
@@ -104,11 +104,11 @@ defmodule Uniops.Integration.UnisonExamplesTest do
   test "FullApp example compiles and runs", %{port: port} do
     source = build_source("FullApp", port)
 
-    result = Uniops.eval(source, timeout: 300_000, entry: "Examples.FullApp.main")
+    result = Unex.eval(source, timeout: 300_000, entry: "Examples.FullApp.main")
 
     case result do
       {:ok, r} ->
-        stdout = Uniops.UCM.Output.strip_ansi(r.stdout)
+        stdout = Unex.UCM.Output.strip_ansi(r.stdout)
         assert stdout =~ "Item:", "Expected 'Item:' in output, got:\n#{stdout}"
         assert stdout =~ "All done!", "Expected 'All done!' in output, got:\n#{stdout}"
 

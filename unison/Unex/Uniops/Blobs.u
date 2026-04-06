@@ -1,0 +1,49 @@
+-- Unex Blobs Ability
+-- Binary object storage on the filesystem.
+
+
+-- Encode bytes as hex text for JSON transport
+Unex.Blobs.hexEncode : Bytes -> Text
+Unex.Blobs.hexEncode bytes = Text.fromUtf8 (Bytes.toBase16 bytes)
+
+Unex.Blobs.hexDecode : Text -> Bytes
+Unex.Blobs.hexDecode txt = Bytes.fromBase16 (Text.toUtf8 txt)
+
+unique ability Unex.Blobs where
+  write : Text -> Text -> Bytes -> ()
+  read : Text -> Text -> Optional Bytes
+  delete : Text -> Text -> ()
+  list : Text -> Text -> [Text]
+
+Unex.Blobs.handler : Text -> Request {Unex.Blobs} a -> {IO, Exception, Http, Threads} a
+Unex.Blobs.handler baseUrl = cases
+  { Unex.Blobs.write db key data -> k } ->
+    encoded = Unex.Blobs.hexEncode data
+    _ = Unex.Http.postJson
+          (baseUrl ++ "/blobs/" ++ db ++ "/" ++ key)
+          ("{\"data\":\"" ++ encoded ++ "\"}")
+    handle k () with Unex.Blobs.handler baseUrl
+
+  { Unex.Blobs.read db key -> k } ->
+    resp = Http.get (URI.parse (baseUrl ++ "/blobs/" ++ db ++ "/" ++ key))
+    val =
+      if Unex.Http.getStatus resp == 404 then None
+      else
+        body = bodyText resp
+        match Unex.Http.extractField body "data" with
+          None -> None
+          Some encoded -> Some (Unex.Blobs.hexDecode encoded)
+    handle k val with Unex.Blobs.handler baseUrl
+
+  { Unex.Blobs.delete db key -> k } ->
+    _ = Unex.Http.deleteReq (baseUrl ++ "/blobs/" ++ db ++ "/" ++ key)
+    handle k () with Unex.Blobs.handler baseUrl
+
+  { Unex.Blobs.list db prefix -> k } ->
+    body = bodyText (Unex.Http.postJson
+          (baseUrl ++ "/blobs/" ++ db ++ "/list")
+          ("{\"prefix\":\"" ++ prefix ++ "\"}"))
+    keys = Unex.Http.parseKeys body
+    handle k keys with Unex.Blobs.handler baseUrl
+
+  { a } -> a

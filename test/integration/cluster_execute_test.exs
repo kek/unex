@@ -1,14 +1,14 @@
-defmodule Uniops.Integration.ClusterExecuteTest do
+defmodule Unex.Integration.ClusterExecuteTest do
   use ExUnit.Case, async: false
 
-  alias Uniops.Cluster.HashCache
-  alias Uniops.Cluster.SyncServer
+  alias Unex.Cluster.HashCache
+  alias Unex.Cluster.SyncServer
 
   @moduletag timeout: 300_000
 
   setup_all do
     unless Node.alive?() do
-      {:ok, _} = :net_kernel.start([:uniops_test, :shortnames])
+      {:ok, _} = :net_kernel.start([:unex_test, :shortnames])
     end
 
     :ok
@@ -16,7 +16,7 @@ defmodule Uniops.Integration.ClusterExecuteTest do
 
   setup do
     pa_args = Enum.flat_map(:code.get_path(), fn p -> [~c"-pa", p] end)
-    {:ok, pid, peer_node} = :peer.start_link(%{name: :uniops_exec_peer, args: pa_args})
+    {:ok, pid, peer_node} = :peer.start_link(%{name: :unex_exec_peer, args: pa_args})
 
     {:ok, _} = :rpc.call(peer_node, Application, :ensure_all_started, [:crypto])
     {:ok, _} = :rpc.call(peer_node, GenServer, :start, [HashCache, HashCache, [name: HashCache]])
@@ -40,12 +40,12 @@ defmodule Uniops.Integration.ClusterExecuteTest do
     dir =
       Path.join(
         System.tmp_dir!(),
-        "uniops_cluster_exec_#{System.unique_integer([:positive])}"
+        "unex_cluster_exec_#{System.unique_integer([:positive])}"
       )
 
-    {:ok, workspace} = Uniops.Workspace.create(dir)
-    {:ok, file_path} = Uniops.Workspace.write_source(workspace, "program.u", source)
-    {:ok, uc_path} = Uniops.Compiler.compile(workspace, file_path, "main", "program")
+    {:ok, workspace} = Unex.Workspace.create(dir)
+    {:ok, file_path} = Unex.Workspace.write_source(workspace, "program.u", source)
+    {:ok, uc_path} = Unex.Compiler.compile(workspace, file_path, "main", "program")
 
     # 2. Cache the .uc bytes locally
     uc_bytes = File.read!(uc_path)
@@ -61,11 +61,11 @@ defmodule Uniops.Integration.ClusterExecuteTest do
     peer_uc_path = Path.join(System.tmp_dir!(), "synced_#{hash}.uc")
     File.write!(peer_uc_path, synced_bytes)
 
-    {:ok, result} = Uniops.Runner.run_compiled(peer_uc_path)
+    {:ok, result} = Unex.Runner.run_compiled(peer_uc_path)
     assert result.stdout =~ "synced-and-executed"
 
     # 5. Cleanup
     File.rm(peer_uc_path)
-    Uniops.Workspace.destroy(workspace)
+    Unex.Workspace.destroy(workspace)
   end
 end

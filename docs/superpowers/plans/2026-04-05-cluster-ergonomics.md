@@ -4,7 +4,7 @@
 
 **Goal:** Replace manual multi-terminal iex-flag cluster setup with zero-config single-node startup, env-var-driven clustering, auto-peer-connect, and a production Mix release.
 
-**Architecture:** A `ConfigResolver` module centralizes the env var > config file > defaults lookup. `PeerConnector` GenServer handles auto-connect with backoff. `mix uniops.start` re-execs with VM distribution flags when needed. The Mix release uses `rel/env.sh.eex` for the same. Tests never start distribution or the API.
+**Architecture:** A `ConfigResolver` module centralizes the env var > config file > defaults lookup. `PeerConnector` GenServer handles auto-connect with backoff. `mix unex.start` re-execs with VM distribution flags when needed. The Mix release uses `rel/env.sh.eex` for the same. Tests never start distribution or the API.
 
 **Tech Stack:** Elixir 1.19 / OTP 28, Mix releases, GenServer, BEAM distribution
 
@@ -13,7 +13,7 @@
 ## File Structure
 
 ```
-lib/uniops/
+lib/unex/
   config_resolver.ex              # Env var > config file > defaults resolution
   cluster/peer_connector.ex       # Auto-connect to peers with backoff
   application.ex                  # Modify: use ConfigResolver, add PeerConnector, always start API
@@ -25,9 +25,9 @@ config/
 rel/
   env.sh.eex                      # VM flag injection for releases
 mix.exs                           # Modify: add release config
-lib/mix/tasks/uniops.start.ex    # mix uniops.start task
+lib/mix/tasks/unex.start.ex    # mix unex.start task
 config.example.exs                # Reference config file
-test/uniops/
+test/unex/
   config_resolver_test.exs        # Tests for config resolution
   cluster/peer_connector_test.exs # Tests for peer connector
 ```
@@ -37,20 +37,20 @@ test/uniops/
 ### Task 1: ConfigResolver
 
 **Files:**
-- Create: `test/uniops/config_resolver_test.exs`
-- Create: `lib/uniops/config_resolver.ex`
+- Create: `test/unex/config_resolver_test.exs`
+- Create: `lib/unex/config_resolver.ex`
 
 ConfigResolver is a pure module (no GenServer) that reads env vars, optionally loads a config file, merges with defaults, and validates. Everything else in the system calls `ConfigResolver.resolve/0` to get the final config.
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `test/uniops/config_resolver_test.exs`:
+Create `test/unex/config_resolver_test.exs`:
 
 ```elixir
-defmodule Uniops.ConfigResolverTest do
+defmodule Unex.ConfigResolverTest do
   use ExUnit.Case, async: true
 
-  alias Uniops.ConfigResolver
+  alias Unex.ConfigResolver
 
   describe "defaults/0" do
     test "returns sensible single-node defaults" do
@@ -66,25 +66,25 @@ defmodule Uniops.ConfigResolverTest do
   end
 
   describe "resolve_env/0" do
-    test "reads UNIOPS_PORT" do
-      System.put_env("UNIOPS_PORT", "5050")
-      on_exit(fn -> System.delete_env("UNIOPS_PORT") end)
+    test "reads UNEX_PORT" do
+      System.put_env("UNEX_PORT", "5050")
+      on_exit(fn -> System.delete_env("UNEX_PORT") end)
 
       env = ConfigResolver.resolve_env()
       assert env.api_port == 5050
     end
 
-    test "reads UNIOPS_NODE" do
-      System.put_env("UNIOPS_NODE", "mynode")
-      on_exit(fn -> System.delete_env("UNIOPS_NODE") end)
+    test "reads UNEX_NODE" do
+      System.put_env("UNEX_NODE", "mynode")
+      on_exit(fn -> System.delete_env("UNEX_NODE") end)
 
       env = ConfigResolver.resolve_env()
       assert env.node_name == "mynode"
     end
 
-    test "reads UNIOPS_PEERS as comma-separated list" do
-      System.put_env("UNIOPS_PEERS", "b@host1,c@host2")
-      on_exit(fn -> System.delete_env("UNIOPS_PEERS") end)
+    test "reads UNEX_PEERS as comma-separated list" do
+      System.put_env("UNEX_PEERS", "b@host1,c@host2")
+      on_exit(fn -> System.delete_env("UNEX_PEERS") end)
 
       env = ConfigResolver.resolve_env()
       assert env.peers == ["b@host1", "c@host2"]
@@ -120,18 +120,18 @@ defmodule Uniops.ConfigResolverTest do
       assert ConfigResolver.validate!(config) == config
     end
 
-    test "raises when UNIOPS_NODE set without UNIOPS_COOKIE" do
+    test "raises when UNEX_NODE set without UNEX_COOKIE" do
       config = %{ConfigResolver.defaults() | node_name: "a", cookie: nil}
 
-      assert_raise ArgumentError, ~r/UNIOPS_COOKIE is required/, fn ->
+      assert_raise ArgumentError, ~r/UNEX_COOKIE is required/, fn ->
         ConfigResolver.validate!(config)
       end
     end
 
-    test "raises when UNIOPS_PEERS set without UNIOPS_NODE" do
+    test "raises when UNEX_PEERS set without UNEX_NODE" do
       config = %{ConfigResolver.defaults() | peers: ["b@host"], node_name: nil}
 
-      assert_raise ArgumentError, ~r/UNIOPS_NODE is required/, fn ->
+      assert_raise ArgumentError, ~r/UNEX_NODE is required/, fn ->
         ConfigResolver.validate!(config)
       end
     end
@@ -144,10 +144,10 @@ defmodule Uniops.ConfigResolverTest do
 
   describe "derive_paths/1" do
     test "derives mnesia_dir and blobs_dir from data_dir" do
-      config = %{ConfigResolver.defaults() | data_dir: "/var/data/uniops"}
+      config = %{ConfigResolver.defaults() | data_dir: "/var/data/unex"}
       derived = ConfigResolver.derive_paths(config)
-      assert derived.mnesia_dir == "/var/data/uniops/mnesia"
-      assert derived.blobs_dir == "/var/data/uniops/blobs"
+      assert derived.mnesia_dir == "/var/data/unex/mnesia"
+      assert derived.blobs_dir == "/var/data/unex/blobs"
     end
   end
 
@@ -182,17 +182,17 @@ end
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `mix test test/uniops/config_resolver_test.exs`
-Expected: compilation error — `Uniops.ConfigResolver` not found
+Run: `mix test test/unex/config_resolver_test.exs`
+Expected: compilation error — `Unex.ConfigResolver` not found
 
 - [ ] **Step 3: Implement ConfigResolver**
 
-Create `lib/uniops/config_resolver.ex`:
+Create `lib/unex/config_resolver.ex`:
 
 ```elixir
-defmodule Uniops.ConfigResolver do
+defmodule Unex.ConfigResolver do
   @moduledoc """
-  Resolves Uniops configuration from env vars > config file > defaults.
+  Resolves Unex configuration from env vars > config file > defaults.
   """
 
   defstruct [
@@ -217,12 +217,12 @@ defmodule Uniops.ConfigResolver do
   @doc "Reads config from environment variables. Unset vars are nil."
   def resolve_env do
     %{
-      node_name: System.get_env("UNIOPS_NODE"),
-      cookie: System.get_env("UNIOPS_COOKIE"),
-      api_port: parse_int(System.get_env("UNIOPS_PORT")),
-      data_dir: System.get_env("UNIOPS_DATA"),
-      peers: parse_peers(System.get_env("UNIOPS_PEERS")),
-      config_encryption_key: System.get_env("UNIOPS_CONFIG_KEY"),
+      node_name: System.get_env("UNEX_NODE"),
+      cookie: System.get_env("UNEX_COOKIE"),
+      api_port: parse_int(System.get_env("UNEX_PORT")),
+      data_dir: System.get_env("UNEX_DATA"),
+      peers: parse_peers(System.get_env("UNEX_PEERS")),
+      config_encryption_key: System.get_env("UNEX_CONFIG_KEY"),
       ucm_path: System.get_env("UCM_PATH")
     }
   end
@@ -237,11 +237,11 @@ defmodule Uniops.ConfigResolver do
   @doc "Validates config. Raises ArgumentError on invalid combinations."
   def validate!(config) do
     if config.node_name && !config.cookie do
-      raise ArgumentError, "UNIOPS_COOKIE is required when UNIOPS_NODE is set"
+      raise ArgumentError, "UNEX_COOKIE is required when UNEX_NODE is set"
     end
 
     if config.peers != [] && config.peers != nil && !config.node_name do
-      raise ArgumentError, "UNIOPS_NODE is required when UNIOPS_PEERS is set"
+      raise ArgumentError, "UNEX_NODE is required when UNEX_PEERS is set"
     end
 
     config
@@ -296,11 +296,11 @@ defmodule Uniops.ConfigResolver do
     path = config_file_path()
 
     if path && File.exists?(path) do
-      [{:uniops, opts}] =
+      [{:unex, opts}] =
         path
         |> Config.Reader.read!()
-        |> Keyword.get(:uniops, [])
-        |> then(fn opts -> [{:uniops, opts}] end)
+        |> Keyword.get(:unex, [])
+        |> then(fn opts -> [{:unex, opts}] end)
 
       Map.new(opts)
     else
@@ -311,14 +311,14 @@ defmodule Uniops.ConfigResolver do
   end
 
   defp config_file_path do
-    System.get_env("UNIOPS_CONFIG") ||
+    System.get_env("UNEX_CONFIG") ||
       find_default_config_file()
   end
 
   defp find_default_config_file do
     candidates = [
-      Path.expand("~/.config/uniops/config.exs"),
-      "/etc/uniops/config.exs"
+      Path.expand("~/.config/unex/config.exs"),
+      "/etc/unex/config.exs"
     ]
 
     Enum.find(candidates, &File.exists?/1)
@@ -342,7 +342,7 @@ end
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `mix test test/uniops/config_resolver_test.exs`
+Run: `mix test test/unex/config_resolver_test.exs`
 Expected: 11 tests, 0 failures
 
 - [ ] **Step 5: Commit**
@@ -357,20 +357,20 @@ jj new
 ### Task 2: PeerConnector GenServer
 
 **Files:**
-- Create: `test/uniops/cluster/peer_connector_test.exs`
-- Create: `lib/uniops/cluster/peer_connector.ex`
+- Create: `test/unex/cluster/peer_connector_test.exs`
+- Create: `lib/unex/cluster/peer_connector.ex`
 
 PeerConnector tries to connect to a list of peer nodes with exponential backoff. It's supervised, but only started when distribution is enabled.
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `test/uniops/cluster/peer_connector_test.exs`:
+Create `test/unex/cluster/peer_connector_test.exs`:
 
 ```elixir
-defmodule Uniops.Cluster.PeerConnectorTest do
+defmodule Unex.Cluster.PeerConnectorTest do
   use ExUnit.Case, async: false
 
-  alias Uniops.Cluster.PeerConnector
+  alias Unex.Cluster.PeerConnector
 
   describe "parse_peers/1" do
     test "converts string peer names to atoms" do
@@ -416,18 +416,18 @@ end
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `mix test test/uniops/cluster/peer_connector_test.exs`
-Expected: compilation error — `Uniops.Cluster.PeerConnector` not found
+Run: `mix test test/unex/cluster/peer_connector_test.exs`
+Expected: compilation error — `Unex.Cluster.PeerConnector` not found
 
 - [ ] **Step 3: Implement PeerConnector**
 
-Create `lib/uniops/cluster/peer_connector.ex`:
+Create `lib/unex/cluster/peer_connector.ex`:
 
 ```elixir
-defmodule Uniops.Cluster.PeerConnector do
+defmodule Unex.Cluster.PeerConnector do
   @moduledoc """
   Automatically connects to declared peer nodes with exponential backoff.
-  Only started when BEAM distribution is enabled (UNIOPS_NODE is set).
+  Only started when BEAM distribution is enabled (UNEX_NODE is set).
   """
 
   use GenServer
@@ -510,12 +510,12 @@ defmodule Uniops.Cluster.PeerConnector do
     else
       case Node.connect(peer) do
         true ->
-          Logger.info("[uniops] Connected to peer #{peer}")
+          Logger.info("[unex] Connected to peer #{peer}")
           %{state | connected: MapSet.put(state.connected, peer)}
 
         _ ->
           backoff = Map.get(state.backoffs, peer, state.base_interval)
-          Logger.warning("[uniops] Failed to connect to #{peer}, retrying in #{backoff}ms")
+          Logger.warning("[unex] Failed to connect to #{peer}, retrying in #{backoff}ms")
           Process.send_after(self(), {:retry, peer}, backoff)
           new_backoff = min(backoff * 2, @max_interval)
           %{state | backoffs: Map.put(state.backoffs, peer, new_backoff)}
@@ -533,7 +533,7 @@ end
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `mix test test/uniops/cluster/peer_connector_test.exs`
+Run: `mix test test/unex/cluster/peer_connector_test.exs`
 Expected: 5 tests, 0 failures
 
 - [ ] **Step 5: Commit**
@@ -551,14 +551,14 @@ jj new
 - Create: `config/runtime.exs`
 - Modify: `config/config.exs`
 - Modify: `config/test.exs`
-- Modify: `lib/uniops/application.ex`
-- Modify: `lib/uniops/abilities/config.ex:74-76`
+- Modify: `lib/unex/application.ex`
+- Modify: `lib/unex/abilities/config.ex:74-76`
 
 This task wires ConfigResolver into the actual application startup. The API always starts (except in tests). PeerConnector starts only when distribution is enabled.
 
 - [ ] **Step 1: Write `config/runtime.exs`**
 
-**Important:** `runtime.exs` in a Mix release is evaluated before application code loads, so it cannot call `Uniops.ConfigResolver`. All resolution logic must be inline here. `ConfigResolver` is still useful for the Mix task and programmatic access, but `runtime.exs` does its own resolution.
+**Important:** `runtime.exs` in a Mix release is evaluated before application code loads, so it cannot call `Unex.ConfigResolver`. All resolution logic must be inline here. `ConfigResolver` is still useful for the Mix task and programmatic access, but `runtime.exs` does its own resolution.
 
 Create `config/runtime.exs`:
 
@@ -568,15 +568,15 @@ import Config
 if config_env() != :test do
   # --- Config file loading ---
   config_path =
-    System.get_env("UNIOPS_CONFIG") ||
+    System.get_env("UNEX_CONFIG") ||
       Enum.find(
-        [Path.expand("~/.config/uniops/config.exs"), "/etc/uniops/config.exs"],
+        [Path.expand("~/.config/unex/config.exs"), "/etc/unex/config.exs"],
         &File.exists?/1
       )
 
   file_config =
     if config_path && File.exists?(config_path) do
-      [{:uniops, opts}] = Config.Reader.read!(config_path) |> Keyword.take([:uniops])
+      [{:unex, opts}] = Config.Reader.read!(config_path) |> Keyword.take([:unex])
       Map.new(opts)
     else
       %{}
@@ -598,11 +598,11 @@ if config_env() != :test do
   end
 
   # --- Resolve values ---
-  data_dir = get.("UNIOPS_DATA", :data_dir, "./data")
-  node_name = get.("UNIOPS_NODE", :node_name, nil)
-  cookie = get.("UNIOPS_COOKIE", :cookie, nil)
+  data_dir = get.("UNEX_DATA", :data_dir, "./data")
+  node_name = get.("UNEX_NODE", :node_name, nil)
+  cookie = get.("UNEX_COOKIE", :cookie, nil)
 
-  peers_raw = System.get_env("UNIOPS_PEERS")
+  peers_raw = System.get_env("UNEX_PEERS")
   peers =
     cond do
       peers_raw != nil -> String.split(peers_raw, ",", trim: true) |> Enum.map(&String.trim/1)
@@ -610,7 +610,7 @@ if config_env() != :test do
       true -> []
     end
 
-  encryption_key = get.("UNIOPS_CONFIG_KEY", :config_encryption_key, nil)
+  encryption_key = get.("UNEX_CONFIG_KEY", :config_encryption_key, nil)
 
   {encryption_key, key_generated?} =
     if encryption_key do
@@ -622,16 +622,16 @@ if config_env() != :test do
 
   # --- Validation ---
   if node_name && !cookie do
-    raise "UNIOPS_COOKIE is required when UNIOPS_NODE is set"
+    raise "UNEX_COOKIE is required when UNEX_NODE is set"
   end
 
   if peers != [] && !node_name do
-    raise "UNIOPS_NODE is required when UNIOPS_PEERS is set"
+    raise "UNEX_NODE is required when UNEX_PEERS is set"
   end
 
   # --- Apply config ---
-  config :uniops,
-    api_port: get_int.("UNIOPS_PORT", :api_port, 4040),
+  config :unex,
+    api_port: get_int.("UNEX_PORT", :api_port, 4040),
     mnesia_dir: Path.join(data_dir, "mnesia"),
     blobs_dir: Path.join(data_dir, "blobs"),
     config_encryption_key: encryption_key,
@@ -642,9 +642,9 @@ if config_env() != :test do
     start_api: true
 
   if key_generated? do
-    IO.puts("[uniops] No encryption key configured. Generated: #{encryption_key}")
-    IO.puts("[uniops] Set UNIOPS_CONFIG_KEY to persist this key across restarts.")
-    IO.puts("[uniops] WARNING: If the key changes, existing encrypted Config values become unreadable.")
+    IO.puts("[unex] No encryption key configured. Generated: #{encryption_key}")
+    IO.puts("[unex] Set UNEX_CONFIG_KEY to persist this key across restarts.")
+    IO.puts("[unex] WARNING: If the key changes, existing encrypted Config values become unreadable.")
   end
 end
 ```
@@ -657,10 +657,10 @@ Replace the contents of `config/config.exs` with:
 import Config
 
 # Compile-time defaults. Runtime config in config/runtime.exs overrides these.
-config :uniops,
+config :unex,
   ucm_path: "ucm",
   ucm_timeout: 30_000,
-  workspace_base: Path.join(System.tmp_dir!(), "uniops"),
+  workspace_base: Path.join(System.tmp_dir!(), "unex"),
   api_port: 4040,
   start_api: false
 
@@ -675,7 +675,7 @@ Replace the contents of `config/test.exs` with:
 import Config
 
 # Tests manage their own Mnesia and API instances — don't auto-start anything
-config :uniops,
+config :unex,
   start_api: false,
   mnesia_dir: nil,
   blobs_dir: nil,
@@ -684,46 +684,46 @@ config :uniops,
 
 - [ ] **Step 4: Update `application.ex` to use ConfigResolver**
 
-Replace the contents of `lib/uniops/application.ex` with:
+Replace the contents of `lib/unex/application.ex` with:
 
 ```elixir
-defmodule Uniops.Application do
+defmodule Unex.Application do
   @moduledoc false
   use Application
 
   @impl true
   def start(_type, _args) do
-    mnesia_dir = Application.get_env(:uniops, :mnesia_dir)
-    if mnesia_dir, do: Uniops.Storage.Schema.init(mnesia_dir)
+    mnesia_dir = Application.get_env(:unex, :mnesia_dir)
+    if mnesia_dir, do: Unex.Storage.Schema.init(mnesia_dir)
 
     children = cluster_children() ++ peer_children() ++ api_children()
-    Supervisor.start_link(children, strategy: :one_for_one, name: Uniops.Supervisor)
+    Supervisor.start_link(children, strategy: :one_for_one, name: Unex.Supervisor)
   end
 
   defp cluster_children do
     [
-      Uniops.Cluster.HashCache,
-      Uniops.Cluster.SyncServer,
-      Uniops.Services.Registry,
-      Uniops.Abilities.Scratch,
-      Uniops.Abilities.Log
+      Unex.Cluster.HashCache,
+      Unex.Cluster.SyncServer,
+      Unex.Services.Registry,
+      Unex.Abilities.Scratch,
+      Unex.Abilities.Log
     ]
   end
 
   defp peer_children do
-    peers = Application.get_env(:uniops, :peers, [])
+    peers = Application.get_env(:unex, :peers, [])
 
     if peers != [] do
-      [{Uniops.Cluster.PeerConnector, peers: peers}]
+      [{Unex.Cluster.PeerConnector, peers: peers}]
     else
       []
     end
   end
 
   defp api_children do
-    if Application.get_env(:uniops, :start_api, false) do
-      port = Application.get_env(:uniops, :api_port, 4040)
-      [{Bandit, plug: Uniops.API.Router, port: port}]
+    if Application.get_env(:unex, :start_api, false) do
+      port = Application.get_env(:unex, :api_port, 4040)
+      [{Bandit, plug: Unex.API.Router, port: port}]
     else
       []
     end
@@ -733,11 +733,11 @@ end
 
 - [ ] **Step 5: Remove hardcoded default encryption key from Config**
 
-In `lib/uniops/abilities/config.ex`, change line 75 from:
+In `lib/unex/abilities/config.ex`, change line 75 from:
 
 ```elixir
   defp encryption_key do
-    configured = Application.get_env(:uniops, :config_encryption_key, "uniops-default-key-change-me!")
+    configured = Application.get_env(:unex, :config_encryption_key, "unex-default-key-change-me!")
     :crypto.hash(:sha256, configured)
   end
 ```
@@ -746,10 +746,10 @@ to:
 
 ```elixir
   defp encryption_key do
-    configured = Application.get_env(:uniops, :config_encryption_key)
+    configured = Application.get_env(:unex, :config_encryption_key)
 
     unless configured do
-      raise "No encryption key configured. Set UNIOPS_CONFIG_KEY environment variable."
+      raise "No encryption key configured. Set UNEX_CONFIG_KEY environment variable."
     end
 
     :crypto.hash(:sha256, configured)
@@ -770,49 +770,49 @@ jj new
 
 ---
 
-### Task 4: Mix Task — `mix uniops.start`
+### Task 4: Mix Task — `mix unex.start`
 
 **Files:**
-- Create: `lib/mix/tasks/uniops.start.ex`
+- Create: `lib/mix/tasks/unex.start.ex`
 
 The Mix task reads config, validates it, and either starts the app directly (no distribution) or re-execs with `--sname`/`--name` and `--cookie` flags to enable BEAM distribution.
 
 - [ ] **Step 1: Create the Mix task**
 
-Create `lib/mix/tasks/uniops.start.ex`:
+Create `lib/mix/tasks/unex.start.ex`:
 
 ```elixir
-defmodule Mix.Tasks.Uniops.Start do
+defmodule Mix.Tasks.Unex.Start do
   @moduledoc """
-  Starts a Uniops node.
+  Starts a Unex node.
 
   ## Usage
 
-      mix uniops.start                          # single node, zero config
-      mix uniops.start --config path/to/config.exs  # with config file
+      mix unex.start                          # single node, zero config
+      mix unex.start --config path/to/config.exs  # with config file
 
   ## Environment Variables
 
-  All UNIOPS_* env vars are supported. See ConfigResolver for details.
+  All UNEX_* env vars are supported. See ConfigResolver for details.
 
-  When UNIOPS_NODE is set, the task re-launches with BEAM distribution flags
+  When UNEX_NODE is set, the task re-launches with BEAM distribution flags
   and drops into an IEx shell.
   """
 
   use Mix.Task
 
-  @shortdoc "Start a Uniops node"
+  @shortdoc "Start a Unex node"
 
   @impl true
   def run(args) do
     {opts, _, _} = OptionParser.parse(args, strict: [config: :string])
 
     if config_path = opts[:config] do
-      System.put_env("UNIOPS_CONFIG", config_path)
+      System.put_env("UNEX_CONFIG", config_path)
     end
 
-    node_name = System.get_env("UNIOPS_NODE")
-    cookie = System.get_env("UNIOPS_COOKIE")
+    node_name = System.get_env("UNEX_NODE")
+    cookie = System.get_env("UNEX_COOKIE")
 
     if node_name do
       reexec_with_distribution(node_name, cookie)
@@ -823,7 +823,7 @@ defmodule Mix.Tasks.Uniops.Start do
 
   defp reexec_with_distribution(node_name, cookie) do
     unless cookie do
-      Mix.raise("UNIOPS_COOKIE is required when UNIOPS_NODE is set")
+      Mix.raise("UNEX_COOKIE is required when UNEX_NODE is set")
     end
 
     node_flag =
@@ -856,12 +856,12 @@ defmodule Mix.Tasks.Uniops.Start do
 
   defp start_without_distribution do
     # Start the application with API enabled
-    Application.put_env(:uniops, :start_api, true)
+    Application.put_env(:unex, :start_api, true)
     Mix.Task.run("app.start")
 
-    port = Application.get_env(:uniops, :api_port, 4040)
-    IO.puts("[uniops] API listening on http://localhost:#{port}")
-    IO.puts("[uniops] Press Ctrl+C to stop")
+    port = Application.get_env(:unex, :api_port, 4040)
+    IO.puts("[unex] API listening on http://localhost:#{port}")
+    IO.puts("[unex] Press Ctrl+C to stop")
 
     # Block forever
     Process.sleep(:infinity)
@@ -871,12 +871,12 @@ end
 
 - [ ] **Step 2: Verify the task is discoverable**
 
-Run: `mix help uniops.start`
+Run: `mix help unex.start`
 Expected: Shows the task moduledoc
 
 - [ ] **Step 3: Smoke test — single node**
 
-Run: `mix uniops.start`
+Run: `mix unex.start`
 Expected: Starts up, prints API port, serves `/health`
 
 Verify in another terminal:
@@ -890,7 +890,7 @@ Then Ctrl+C to stop.
 - [ ] **Step 4: Commit**
 
 ```bash
-jj desc -m "Add mix uniops.start task for easy node startup"
+jj desc -m "Add mix unex.start task for easy node startup"
 jj new
 ```
 
@@ -910,24 +910,24 @@ Create `rel/env.sh.eex`:
 ```bash
 #!/bin/sh
 
-# Translate UNIOPS_NODE and UNIOPS_COOKIE into BEAM VM flags.
+# Translate UNEX_NODE and UNEX_COOKIE into BEAM VM flags.
 # This runs before the BEAM starts, so it can set --sname/--name and --cookie.
 
-if [ -n "$UNIOPS_NODE" ]; then
-  case "$UNIOPS_NODE" in
+if [ -n "$UNEX_NODE" ]; then
+  case "$UNEX_NODE" in
     *@*)
       export RELEASE_DISTRIBUTION=name
-      export RELEASE_NODE="$UNIOPS_NODE"
+      export RELEASE_NODE="$UNEX_NODE"
       ;;
     *)
       export RELEASE_DISTRIBUTION=sname
-      export RELEASE_NODE="$UNIOPS_NODE"
+      export RELEASE_NODE="$UNEX_NODE"
       ;;
   esac
 fi
 
-if [ -n "$UNIOPS_COOKIE" ]; then
-  export RELEASE_COOKIE="$UNIOPS_COOKIE"
+if [ -n "$UNEX_COOKIE" ]; then
+  export RELEASE_COOKIE="$UNEX_COOKIE"
 fi
 ```
 
@@ -938,7 +938,7 @@ In `mix.exs`, add the `releases` key to the `project/0` function:
 ```elixir
   def project do
     [
-      app: :uniops,
+      app: :unex,
       version: "0.1.0",
       elixir: "~> 1.17",
       start_permanent: Mix.env() == :prod,
@@ -950,7 +950,7 @@ In `mix.exs`, add the `releases` key to the `project/0` function:
 
   defp releases do
     [
-      uniops: [
+      unex: [
         include_executables_for: [:unix],
         rel_templates_path: "rel"
       ]
@@ -963,23 +963,23 @@ In `mix.exs`, add the `releases` key to the `project/0` function:
 Create `config.example.exs` at the project root:
 
 ```elixir
-# Uniops configuration file example.
+# Unex configuration file example.
 #
 # Copy this file and point to it:
-#   UNIOPS_CONFIG=/path/to/config.exs mix uniops.start
+#   UNEX_CONFIG=/path/to/config.exs mix unex.start
 #
 # Or place it at one of the default locations:
-#   ~/.config/uniops/config.exs
-#   /etc/uniops/config.exs
+#   ~/.config/unex/config.exs
+#   /etc/unex/config.exs
 #
 # Environment variables always override values from this file.
 
 import Config
 
-config :uniops,
+config :unex,
   # Node identity (required for clustering)
   # node_name: "a",                              # short name (same subnet) — or "a@10.0.1.5" for cross-network
-  # cookie: "uniops_secret",                     # must match on all cluster nodes
+  # cookie: "unex_secret",                     # must match on all cluster nodes
 
   # HTTP API
   api_port: 4040,
@@ -1002,7 +1002,7 @@ config :uniops,
 - [ ] **Step 4: Verify release builds**
 
 Run: `MIX_ENV=prod mix release`
-Expected: Produces `_build/prod/rel/uniops/bin/uniops`
+Expected: Produces `_build/prod/rel/unex/bin/unex`
 
 - [ ] **Step 5: Commit**
 
@@ -1030,7 +1030,7 @@ Replace the Quick start section (from `## Quick start` to the `curl` health chec
 ```bash
 # Prerequisites: Elixir 1.17+, UCM (Unison Codebase Manager)
 mix deps.get
-mix uniops.start
+mix unex.start
 ```
 
 The API starts on `http://localhost:4040` with zero configuration.
@@ -1050,20 +1050,20 @@ Replace everything from `## Running a cluster` through the end of the remote exe
 ````markdown
 ## Running a cluster
 
-Uniops nodes use BEAM's built-in distribution to form clusters. Set a few environment variables and nodes auto-connect.
+Unex nodes use BEAM's built-in distribution to form clusters. Set a few environment variables and nodes auto-connect.
 
 ### Starting a two-node cluster
 
 **Terminal 1 — node `a`:**
 
 ```bash
-UNIOPS_NODE=a UNIOPS_COOKIE=secret UNIOPS_PORT=4040 UNIOPS_PEERS=b@$(hostname) mix uniops.start
+UNEX_NODE=a UNEX_COOKIE=secret UNEX_PORT=4040 UNEX_PEERS=b@$(hostname) mix unex.start
 ```
 
 **Terminal 2 — node `b`:**
 
 ```bash
-UNIOPS_NODE=b UNIOPS_COOKIE=secret UNIOPS_PORT=4041 UNIOPS_PEERS=a@$(hostname) mix uniops.start
+UNEX_NODE=b UNEX_COOKIE=secret UNEX_PORT=4041 UNEX_PEERS=a@$(hostname) mix unex.start
 ```
 
 Nodes auto-connect — no manual `Node.connect` needed. Check from IEx:
@@ -1081,10 +1081,10 @@ For complex setups, use a config file instead of env vars:
 # Copy the example
 cp config.example.exs mynode.exs
 # Edit it, then start
-UNIOPS_CONFIG=mynode.exs mix uniops.start
+UNEX_CONFIG=mynode.exs mix unex.start
 ```
 
-Config files can also live at `~/.config/uniops/config.exs` or `/etc/uniops/config.exs`.
+Config files can also live at `~/.config/unex/config.exs` or `/etc/unex/config.exs`.
 
 ### Production deployment
 
@@ -1098,13 +1098,13 @@ Run it:
 
 ```bash
 # Single node
-./bin/uniops start
+./bin/unex start
 
 # Cluster node
-UNIOPS_NODE=a UNIOPS_COOKIE=secret UNIOPS_PEERS=b@10.0.1.2 ./bin/uniops start
+UNEX_NODE=a UNEX_COOKIE=secret UNEX_PEERS=b@10.0.1.2 ./bin/unex start
 
 # Attach console to running node
-./bin/uniops remote
+./bin/unex remote
 ```
 ````
 
@@ -1115,24 +1115,24 @@ Replace the Configuration section with:
 ````markdown
 ## Configuration
 
-Uniops resolves config in this order (first wins): environment variables → config file → built-in defaults.
+Unex resolves config in this order (first wins): environment variables → config file → built-in defaults.
 
 ### Environment variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `UNIOPS_NODE` | *(none)* | Node name. Short name (`a`) for same subnet, FQDN (`a@10.0.1.5`) for cross-network |
-| `UNIOPS_COOKIE` | *(none)* | Cluster auth cookie (required if `UNIOPS_NODE` is set) |
-| `UNIOPS_PORT` | `4040` | HTTP API port |
-| `UNIOPS_DATA` | `./data` | Base directory for Mnesia and blob storage |
-| `UNIOPS_PEERS` | *(none)* | Comma-separated peer nodes to auto-connect |
-| `UNIOPS_CONFIG_KEY` | *(generated)* | AES-256-GCM encryption key for Config secrets |
-| `UNIOPS_CONFIG` | *(none)* | Path to config file |
+| `UNEX_NODE` | *(none)* | Node name. Short name (`a`) for same subnet, FQDN (`a@10.0.1.5`) for cross-network |
+| `UNEX_COOKIE` | *(none)* | Cluster auth cookie (required if `UNEX_NODE` is set) |
+| `UNEX_PORT` | `4040` | HTTP API port |
+| `UNEX_DATA` | `./data` | Base directory for Mnesia and blob storage |
+| `UNEX_PEERS` | *(none)* | Comma-separated peer nodes to auto-connect |
+| `UNEX_CONFIG_KEY` | *(generated)* | AES-256-GCM encryption key for Config secrets |
+| `UNEX_CONFIG` | *(none)* | Path to config file |
 | `UCM_PATH` | `ucm` | Path to UCM binary |
 
 ### Config file
 
-See `config.example.exs` for a complete reference. Place at `~/.config/uniops/config.exs`, `/etc/uniops/config.exs`, or point to it with `UNIOPS_CONFIG`.
+See `config.example.exs` for a complete reference. Place at `~/.config/unex/config.exs`, `/etc/unex/config.exs`, or point to it with `UNEX_CONFIG`.
 ````
 
 - [ ] **Step 4: Run tests to verify nothing broke**
@@ -1165,7 +1165,7 @@ Expected: Clean compilation
 
 - [ ] **Step 3: Verify single-node startup**
 
-Run: `mix uniops.start`
+Run: `mix unex.start`
 Expected:
 - Prints generated encryption key warning
 - API serves `/health` on port 4040

@@ -1,6 +1,6 @@
-# Uniops Guide
+# Unex Guide
 
-A hands-on guide to running Unison programs on the Uniops platform. By the end you'll have a Unison app that stores data, manages secrets, and caches state — all through idiomatic Unison abilities.
+A hands-on guide to running Unison programs on the Unex platform. By the end you'll have a Unison app that stores data, manages secrets, and caches state — all through idiomatic Unison abilities.
 
 ## Prerequisites
 
@@ -10,9 +10,9 @@ A hands-on guide to running Unison programs on the Uniops platform. By the end y
 ## Part 1: Start the server
 
 ```bash
-git clone <repo-url> uniops && cd uniops
+git clone <repo-url> unex && cd unex
 mix deps.get
-mix uniops.start
+mix unex.start
 ```
 
 That's it. The API is live on `http://localhost:4040`. Verify:
@@ -35,51 +35,51 @@ ucm
 myapp/main> lib.install @unison/http
 ```
 
-Now copy the Uniops ability library into your project. From the repo root:
+Now copy the Unex ability library into your project. From the repo root:
 
 ```bash
 cp -r unison/ /path/to/your/unison/project/
 ```
 
 The `unison/` directory contains:
-- **Ability definitions** — `UStorage`, `UConfig`, `UBlobs`, `UScratch`, `ULog`, `URemote`, `UServices`
-- **HTTP handlers** — translate each ability into calls to the Uniops API
-- **`Uniops.main`** — composes all handlers so you can use every ability at once
+- **Ability definitions** — `Unex.Storage`, `Unex.Config`, `Unex.Blobs`, `Unex.Scratch`, `Unex.Log`, `Unex.Remote`, `Unex.Services`
+- **HTTP handlers** — translate each ability into calls to the Unex API
+- **`Unex.main`** — composes all handlers so you can use every ability at once
 - **Examples** — working programs you can run immediately
 
-## Part 3: Your first Unison program on Uniops
+## Part 3: Your first Unison program on Unex
 
 Create a file `app.u` in your project:
 
 ```unison
-myApp : '{UStorage, IO, Exception} ()
+myApp : '{Unex.Storage, IO, Exception} ()
 myApp = do
   -- Create a database and table
-  UStorage.createDatabase "mydb"
-  UStorage.createTable "mydb" "users"
+  Unex.Storage.createDatabase "mydb"
+  Unex.Storage.createTable "mydb" "users"
 
   -- Write data
-  UStorage.write "mydb" "users" "alice" "role=admin"
-  UStorage.write "mydb" "users" "bob" "role=viewer"
+  Unex.Storage.write "mydb" "users" "alice" "role=admin"
+  Unex.Storage.write "mydb" "users" "bob" "role=viewer"
 
   -- Read it back
-  match UStorage.read "mydb" "users" "alice" with
+  match Unex.Storage.read "mydb" "users" "alice" with
     Some val -> printLine ("Alice: " ++ val)
     None -> printLine "Not found"
 
   -- Cells: single durable values
-  UStorage.writeCell "mydb" "visitor_count" "42"
-  match UStorage.readCell "mydb" "visitor_count" with
+  Unex.Storage.writeCell "mydb" "visitor_count" "42"
+  match Unex.Storage.readCell "mydb" "visitor_count" with
     Some n -> printLine ("Visitors: " ++ n)
     None -> printLine "No count"
 
   printLine "Done!"
 
 main : '{IO, Exception} ()
-main = Uniops.main "http://localhost:4040" myApp
+main = Unex.main "http://localhost:4040" myApp
 ```
 
-Load and run it in UCM (with `mix uniops.start` running in another terminal):
+Load and run it in UCM (with `mix unex.start` running in another terminal):
 
 ```
 myapp/main> load app.u
@@ -92,41 +92,41 @@ myapp/main> run main
 
 ### What just happened
 
-Your program used the `UStorage` ability — an abstract interface for storage operations. It never called HTTP directly. The `Uniops.main` function wrapped your program in a handler that translates each `UStorage` operation into an HTTP call to the Uniops server. The handler pattern is:
+Your program used the `Unex.Storage` ability — an abstract interface for storage operations. It never called HTTP directly. The `Unex.main` function wrapped your program in a handler that translates each `Unex.Storage` operation into an HTTP call to the Unex server. The handler pattern is:
 
 ```
-Your program (uses UStorage)
+Your program (uses Unex.Storage)
     ↓
-UStorage.handler (translates to HTTP)
+Unex.Storage.handler (translates to HTTP)
     ↓
-Uniops HTTP API (stores in Mnesia)
+Unex HTTP API (stores in Mnesia)
 ```
 
 This separation means you can swap the handler for testing (see Part 7) or for a different backend — your program code doesn't change.
 
 ## Part 4: Encrypted secrets with Config
 
-Uniops stores config values encrypted at rest with AES-256-GCM. Values are scoped by environment.
+Unex stores config values encrypted at rest with AES-256-GCM. Values are scoped by environment.
 
 ```unison
-secretsApp : '{UConfig, IO, Exception} ()
+secretsApp : '{Unex.Config, IO, Exception} ()
 secretsApp = do
   -- Store secrets (encrypted at rest)
-  UConfig.set "prod" "api_key" "sk-live-abc123"
-  UConfig.set "prod" "db_password" "supersecret"
-  UConfig.set "staging" "api_key" "sk-test-xyz"
+  Unex.Config.set "prod" "api_key" "sk-live-abc123"
+  Unex.Config.set "prod" "db_password" "supersecret"
+  Unex.Config.set "staging" "api_key" "sk-test-xyz"
 
   -- Read them back
-  match UConfig.get "prod" "api_key" with
+  match Unex.Config.get "prod" "api_key" with
     Some key -> printLine ("Prod key: " ++ key)
     None -> printLine "No key!"
 
   -- List all keys in an environment
-  keys = UConfig.list "prod"
+  keys = Unex.Config.list "prod"
   printLine ("Prod keys: " ++ Text.join ", " keys)
 
 main : '{IO, Exception} ()
-main = Uniops.main "http://localhost:4040" secretsApp
+main = Unex.main "http://localhost:4040" secretsApp
 ```
 
 ```
@@ -141,57 +141,57 @@ myapp/main> run main
 Scratch is a node-local, in-memory cache. Data is lost on server restart — use it for session state, caching, temporary data.
 
 ```unison
-cacheApp : '{UScratch, IO, Exception} ()
+cacheApp : '{Unex.Scratch, IO, Exception} ()
 cacheApp = do
-  UScratch.put "session:user42" "name=Alice,role=admin"
+  Unex.Scratch.put "session:user42" "name=Alice,role=admin"
 
-  match UScratch.get "session:user42" with
+  match Unex.Scratch.get "session:user42" with
     Some data -> printLine ("Session: " ++ data)
     None -> printLine "Cache miss"
 
   -- Delete when done
-  UScratch.delete "session:user42"
+  Unex.Scratch.delete "session:user42"
 
 main : '{IO, Exception} ()
-main = Uniops.main "http://localhost:4040" cacheApp
+main = Unex.main "http://localhost:4040" cacheApp
 ```
 
 ## Part 6: Composing multiple abilities
 
-The real power: use multiple abilities in one program. `Uniops.main` handles all seven.
+The real power: use multiple abilities in one program. `Unex.main` handles all seven.
 
 ```unison
-fullApp : '{UStorage, UConfig, UScratch, ULog, IO, Exception} ()
+fullApp : '{Unex.Storage, Unex.Config, Unex.Scratch, Unex.Log, IO, Exception} ()
 fullApp = do
-  ULog.info "Application starting"
+  Unex.Log.info "Application starting"
 
   -- Set up storage
-  UStorage.createDatabase "shop"
-  UStorage.createTable "shop" "products"
+  Unex.Storage.createDatabase "shop"
+  Unex.Storage.createTable "shop" "products"
 
   -- Store a secret
-  UConfig.set "prod" "stripe_key" "sk-live-xxx"
+  Unex.Config.set "prod" "stripe_key" "sk-live-xxx"
 
   -- Write data
-  UStorage.write "shop" "products" "widget" "price=9.99"
+  Unex.Storage.write "shop" "products" "widget" "price=9.99"
 
   -- Cache a recent query
-  UScratch.put "last_product" "widget"
+  Unex.Scratch.put "last_product" "widget"
 
   -- Read everything back
-  match UStorage.read "shop" "products" "widget" with
+  match Unex.Storage.read "shop" "products" "widget" with
     Some val -> printLine ("Product: " ++ val)
     None -> printLine "Not found"
 
-  match UConfig.get "prod" "stripe_key" with
+  match Unex.Config.get "prod" "stripe_key" with
     Some key -> printLine ("Stripe: " ++ Text.take 10 key ++ "...")
     None -> printLine "No key"
 
-  ULog.info "Application finished"
+  Unex.Log.info "Application finished"
   printLine "All done!"
 
 main : '{IO, Exception} ()
-main = Uniops.main "http://localhost:4040" fullApp
+main = Unex.main "http://localhost:4040" fullApp
 ```
 
 ### Using individual handlers
@@ -203,15 +203,15 @@ You don't have to use all seven abilities. Compose only what you need:
 main : '{IO, Exception} ()
 main = do
   Threads.run do Http.run do
-    handle !myStorageApp with UStorage.handler "http://localhost:4040"
+    handle !myStorageApp with Unex.Storage.handler "http://localhost:4040"
 
 -- Storage + Config
 main : '{IO, Exception} ()
 main = do
   Threads.run do Http.run do
     handle
-      (handle !myApp with UStorage.handler "http://localhost:4040")
-      with UConfig.handler "http://localhost:4040"
+      (handle !myApp with Unex.Storage.handler "http://localhost:4040")
+      with Unex.Config.handler "http://localhost:4040"
 ```
 
 ## Part 7: Testing with mock handlers
@@ -219,12 +219,12 @@ main = do
 The ability pattern makes testing easy — swap the real HTTP handler for a mock:
 
 ```unison
-mockStorage : Request {UStorage} a -> a
+mockStorage : Request {Unex.Storage} a -> a
 mockStorage = cases
-  { UStorage.read _ _ _ -> k } -> handle k (Some "mock-value") with mockStorage
-  { UStorage.write _ _ _ _ -> k } -> handle k () with mockStorage
-  { UStorage.createDatabase _ -> k } -> handle k () with mockStorage
-  { UStorage.createTable _ _ -> k } -> handle k () with mockStorage
+  { Unex.Storage.read _ _ _ -> k } -> handle k (Some "mock-value") with mockStorage
+  { Unex.Storage.write _ _ _ _ -> k } -> handle k () with mockStorage
+  { Unex.Storage.createDatabase _ -> k } -> handle k () with mockStorage
+  { Unex.Storage.createTable _ _ -> k } -> handle k () with mockStorage
   { a } -> a
 
 -- Test your app without a running server
@@ -241,12 +241,12 @@ Your program doesn't know (or care) whether it's talking to a real server or a m
 
 Terminal 1:
 ```bash
-UNIOPS_NODE=a UNIOPS_COOKIE=secret UNIOPS_PORT=4040 UNIOPS_PEERS=b@$(hostname) mix uniops.start
+UNEX_NODE=a UNEX_COOKIE=secret UNEX_PORT=4040 UNEX_PEERS=b@$(hostname) mix unex.start
 ```
 
 Terminal 2:
 ```bash
-UNIOPS_NODE=b UNIOPS_COOKIE=secret UNIOPS_PORT=4041 UNIOPS_PEERS=a@$(hostname) mix uniops.start
+UNEX_NODE=b UNEX_COOKIE=secret UNEX_PORT=4041 UNEX_PEERS=a@$(hostname) mix unex.start
 ```
 
 Nodes auto-connect. Data written to node `a`'s storage API is on node `a`'s Mnesia. Config (encrypted secrets) is also per-node. Scratch is always node-local.
@@ -257,36 +257,36 @@ Use full node names:
 
 ```bash
 # Machine 1 (10.0.1.5)
-UNIOPS_NODE=a@10.0.1.5 UNIOPS_COOKIE=secret UNIOPS_PEERS=b@10.0.1.6 mix uniops.start
+UNEX_NODE=a@10.0.1.5 UNEX_COOKIE=secret UNEX_PEERS=b@10.0.1.6 mix unex.start
 
 # Machine 2 (10.0.1.6)
-UNIOPS_NODE=b@10.0.1.6 UNIOPS_COOKIE=secret UNIOPS_PEERS=a@10.0.1.5 mix uniops.start
+UNEX_NODE=b@10.0.1.6 UNEX_COOKIE=secret UNEX_PEERS=a@10.0.1.5 mix unex.start
 ```
 
 ### Production deployment
 
 ```bash
 MIX_ENV=prod mix release
-UNIOPS_NODE=a UNIOPS_COOKIE=secret ./bin/uniops start
+UNEX_NODE=a UNEX_COOKIE=secret ./bin/unex start
 ```
 
 See `config.example.exs` for all options, or use environment variables (documented in README.md).
 
 ## Part 9: How it works
 
-Uniops has two layers:
+Unex has two layers:
 
 ```
 ┌─────────────────────────────────────┐
 │  Your Unison program                │
-│  uses: UStorage, UConfig, UScratch  │
+│  uses: Unex.Storage, Unex.Config, Unex.Scratch  │
 │            ↓ abilities              │
 │  Ability handlers (Unison)          │
 │  translates to HTTP calls           │
 └───────────────┬─────────────────────┘
                 │ HTTP
 ┌───────────────┴─────────────────────┐
-│  Uniops server (Elixir/BEAM)       │
+│  Unex server (Elixir/BEAM)       │
 │                                     │
 │  ┌──────────┐ ┌───────┐ ┌───────┐  │
 │  │ Mnesia   │ │  ETS  │ │ Files │  │
@@ -300,9 +300,9 @@ Uniops has two layers:
 
 **Storage** (databases, tables, cells, transactions) — Mnesia, durable to disk.
 
-**Config** — Mnesia with AES-256-GCM encryption. Secrets scoped by environment. The encryption key is set via `UNIOPS_CONFIG_KEY` (or auto-generated on first run).
+**Config** — Mnesia with AES-256-GCM encryption. Secrets scoped by environment. The encryption key is set via `UNEX_CONFIG_KEY` (or auto-generated on first run).
 
-**Blobs** — binary objects stored on the filesystem at `$UNIOPS_DATA/blobs/`.
+**Blobs** — binary objects stored on the filesystem at `$UNEX_DATA/blobs/`.
 
 **Scratch** — ETS (in-memory). Fast, node-local. Lost on restart.
 
@@ -316,13 +316,13 @@ Uniops has two layers:
 
 | Ability | Operations | Backend |
 |---------|-----------|---------|
-| `UStorage` | `createDatabase`, `listDatabases`, `createTable`, `write`, `read`, `delete`, `scan`, `writeCell`, `readCell`, `tx` | Mnesia |
-| `UConfig` | `set`, `get`, `delete`, `list` | Mnesia + AES-256-GCM |
-| `UBlobs` | `write`, `read`, `delete`, `list` | Filesystem |
-| `UScratch` | `put`, `get`, `delete` | ETS |
-| `ULog` | `info`, `error`, `warn`, `recent` | ETS ring buffer |
-| `URemote` | `execute`, `submit` | BEAM distribution |
-| `UServices` | `deploy`, `call`, `list`, `undeploy` | Registry + Remote |
+| `Unex.Storage` | `createDatabase`, `listDatabases`, `createTable`, `write`, `read`, `delete`, `scan`, `writeCell`, `readCell`, `tx` | Mnesia |
+| `Unex.Config` | `set`, `get`, `delete`, `list` | Mnesia + AES-256-GCM |
+| `Unex.Blobs` | `write`, `read`, `delete`, `list` | Filesystem |
+| `Unex.Scratch` | `put`, `get`, `delete` | ETS |
+| `Unex.Log` | `info`, `error`, `warn`, `recent` | ETS ring buffer |
+| `Unex.Remote` | `execute`, `submit` | BEAM distribution |
+| `Unex.Services` | `deploy`, `call`, `list`, `undeploy` | Registry + Remote |
 
 ## HTTP API reference
 

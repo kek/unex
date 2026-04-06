@@ -1,0 +1,34 @@
+-- Unex Services Ability
+-- Deploy, call, list, and undeploy named services.
+
+
+structural type Unex.ServiceInfo = { name : Text, hash : Text, node : Text }
+
+unique ability Unex.Services where
+  deploy : Text -> Text -> Text
+  call : Text -> Text
+  list : [Unex.ServiceInfo]
+  undeploy : Text -> ()
+
+Unex.Services.handler : Text -> Request {Unex.Services} a -> {IO, Exception, Http, Threads} a
+Unex.Services.handler baseUrl = cases
+  { Unex.Services.deploy name source -> k } ->
+    body = bodyText (Unex.Http.postJson
+          (baseUrl ++ "/services/deploy")
+          ("{\"name\":\"" ++ name ++ "\",\"source\":\"" ++ source ++ "\"}"))
+    handle k body with Unex.Services.handler baseUrl
+
+  { Unex.Services.call name -> k } ->
+    body = bodyText (Unex.Http.postEmpty (baseUrl ++ "/services/" ++ name ++ "/call"))
+    handle k body with Unex.Services.handler baseUrl
+
+  { Unex.Services.list -> k } ->
+    _ = Unex.Http.getJson (baseUrl ++ "/services")
+    -- Return empty list — full JSON array parsing is complex
+    handle k [] with Unex.Services.handler baseUrl
+
+  { Unex.Services.undeploy name -> k } ->
+    _ = Unex.Http.deleteReq (baseUrl ++ "/services/" ++ name)
+    handle k () with Unex.Services.handler baseUrl
+
+  { a } -> a

@@ -3,9 +3,9 @@ import Config
 if config_env() != :test do
   # --- Config file loading ---
   config_path =
-    System.get_env("UNIOPS_CONFIG") ||
+    System.get_env("UNEX_CONFIG") ||
       Enum.find(
-        [Path.expand("~/.config/uniops/config.exs"), "/etc/uniops/config.exs"],
+        [Path.expand("~/.config/unex/config.exs"), "/etc/unex/config.exs"],
         &File.exists?/1
       )
 
@@ -13,7 +13,7 @@ if config_env() != :test do
     if config_path && File.exists?(config_path) do
       config_path
       |> Config.Reader.read!()
-      |> Keyword.get(:uniops, [])
+      |> Keyword.get(:unex, [])
       |> Map.new()
     else
       %{}
@@ -35,11 +35,11 @@ if config_env() != :test do
   end
 
   # --- Resolve values ---
-  data_dir = get.("UNIOPS_DATA", :data_dir, "./data")
-  node_name = get.("UNIOPS_NODE", :node_name, nil)
-  cookie = get.("UNIOPS_COOKIE", :cookie, nil)
+  data_dir = get.("UNEX_DATA", :data_dir, "./data")
+  node_name = get.("UNEX_NODE", :node_name, nil)
+  cookie = get.("UNEX_COOKIE", :cookie, nil)
 
-  peers_raw = System.get_env("UNIOPS_PEERS")
+  peers_raw = System.get_env("UNEX_PEERS")
   peers =
     cond do
       peers_raw != nil -> String.split(peers_raw, ",", trim: true) |> Enum.map(&String.trim/1)
@@ -47,7 +47,7 @@ if config_env() != :test do
       true -> []
     end
 
-  encryption_key = get.("UNIOPS_CONFIG_KEY", :config_encryption_key, nil)
+  encryption_key = get.("UNEX_CONFIG_KEY", :config_encryption_key, nil)
 
   {encryption_key, key_generated?} =
     if encryption_key do
@@ -59,16 +59,16 @@ if config_env() != :test do
 
   # --- Validation ---
   if node_name && !cookie do
-    raise "UNIOPS_COOKIE is required when UNIOPS_NODE is set"
+    raise "UNEX_COOKIE is required when UNEX_NODE is set"
   end
 
   if peers != [] && !node_name do
-    raise "UNIOPS_NODE is required when UNIOPS_PEERS is set"
+    raise "UNEX_NODE is required when UNEX_PEERS is set"
   end
 
   # --- Apply config ---
-  config :uniops,
-    api_port: get_int.("UNIOPS_PORT", :api_port, 4040),
+  config :unex,
+    api_port: get_int.("UNEX_PORT", :api_port, 4040),
     mnesia_dir: Path.join(data_dir, "mnesia"),
     blobs_dir: Path.join(data_dir, "blobs"),
     config_encryption_key: encryption_key,
@@ -79,8 +79,8 @@ if config_env() != :test do
     start_api: true
 
   if key_generated? do
-    IO.puts("[uniops] No encryption key configured. Generated: #{encryption_key}")
-    IO.puts("[uniops] Set UNIOPS_CONFIG_KEY to persist this key across restarts.")
-    IO.puts("[uniops] WARNING: If the key changes, existing encrypted Config values become unreadable.")
+    IO.puts("[unex] No encryption key configured. Generated: #{encryption_key}")
+    IO.puts("[unex] Set UNEX_CONFIG_KEY to persist this key across restarts.")
+    IO.puts("[unex] WARNING: If the key changes, existing encrypted Config values become unreadable.")
   end
 end

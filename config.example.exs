@@ -1,20 +1,20 @@
-# Uniops configuration file example.
+# Unex configuration file example.
 #
 # Copy this file and point to it:
-#   UNIOPS_CONFIG=/path/to/config.exs mix uniops.start
+#   UNEX_CONFIG=/path/to/config.exs mix unex.start
 #
 # Or place it at one of the default locations:
-#   ~/.config/uniops/config.exs
-#   /etc/uniops/config.exs
+#   ~/.config/unex/config.exs
+#   /etc/unex/config.exs
 #
 # Environment variables always override values from this file.
 
 import Config
 
-config :uniops,
+config :unex,
   # Node identity (required for clustering)
   # node_name: "a",                              # short name (same subnet) — or "a@10.0.1.5" for cross-network
-  # cookie: "uniops_secret",                     # must match on all cluster nodes
+  # cookie: "unex_secret",                     # must match on all cluster nodes
 
   # HTTP API
   api_port: 4040,

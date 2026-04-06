@@ -1,34 +1,34 @@
--- Example: Basic Storage operations using UStorage ability
+-- Example: Basic Storage operations using Unex.Storage ability
 --
--- Run with: (Uniops server must be running on localhost:4040)
+-- Run with: (Unex server must be running on localhost:4040)
 --   myProject/main> run Examples.BasicStorage.main
 
 
-Examples.BasicStorage.app : '{UStorage, IO, Exception} ()
+Examples.BasicStorage.app : '{Unex.Storage, IO, Exception} ()
 Examples.BasicStorage.app = do
   -- Create a database and table
-  UStorage.createDatabase "demo"
-  UStorage.createTable "demo" "users"
+  Unex.Storage.createDatabase "demo"
+  Unex.Storage.createTable "demo" "users"
 
   -- Write some data
-  UStorage.write "demo" "users" "alice" "role=admin,email=alice@example.com"
-  UStorage.write "demo" "users" "bob" "role=viewer"
+  Unex.Storage.write "demo" "users" "alice" "role=admin,email=alice@example.com"
+  Unex.Storage.write "demo" "users" "bob" "role=viewer"
 
   -- Read it back
-  match UStorage.read "demo" "users" "alice" with
+  match Unex.Storage.read "demo" "users" "alice" with
     Some val -> printLine ("Alice: " ++ val)
     None -> printLine "Alice not found!"
 
   -- Use a cell
-  UStorage.writeCell "demo" "visitor_count" "42"
-  match UStorage.readCell "demo" "visitor_count" with
+  Unex.Storage.writeCell "demo" "visitor_count" "42"
+  match Unex.Storage.readCell "demo" "visitor_count" with
     Some count -> printLine ("Visitors: " ++ count)
     None -> printLine "No count"
 
   -- Delete a key
-  UStorage.delete "demo" "users" "bob"
+  Unex.Storage.delete "demo" "users" "bob"
   printLine "Done!"
 
 Examples.BasicStorage.main : '{IO, Exception} ()
 Examples.BasicStorage.main =
-  Uniops.main "http://localhost:4040" Examples.BasicStorage.app
+  Unex.main "http://localhost:4040" Examples.BasicStorage.app

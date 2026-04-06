@@ -1,4 +1,4 @@
-# Uniops Foundation: Elixir Shell + UCM Integration
+# Unex Foundation: Elixir Shell + UCM Integration
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -12,7 +12,7 @@
 
 ## Scope Note
 
-This is Plan 1 of 6 for the Uniops project (open-source Unison distributed runtime). This plan covers only the Elixir foundation and UCM integration. Subsequent plans:
+This is Plan 1 of 6 for the Unex project (open-source Unison distributed runtime). This plan covers only the Elixir foundation and UCM integration. Subsequent plans:
 
 - **Plan 2:** Storage ability handlers (Mnesia-backed, single node)
 - **Plan 3:** BEAM clustering + hash cache + dependency sync
@@ -29,13 +29,13 @@ This is Plan 1 of 6 for the Uniops project (open-source Unison distributed runti
 ## File Structure
 
 ```
-uniops/
+unex/
 ├── mix.exs                              # Project definition, deps, config
 ├── config/
 │   └── config.exs                       # Application config (UCM path, timeouts)
 ├── lib/
-│   ├── uniops.ex                        # Public API facade
-│   ├── uniops/
+│   ├── unex.ex                        # Public API facade
+│   ├── unex/
 │   │   ├── application.ex               # OTP Application callback
 │   │   ├── ucm.ex                       # UCM binary detection + version check
 │   │   ├── workspace.ex                 # Unison codebase/project directory management
@@ -43,7 +43,7 @@ uniops/
 │   │   └── runner.ex                    # Execute Unison code (run.file, run.compiled)
 ├── test/
 │   ├── test_helper.exs                  # ExUnit config
-│   ├── uniops/
+│   ├── unex/
 │   │   ├── ucm_test.exs                 # UCM detection tests
 │   │   ├── workspace_test.exs           # Workspace management tests
 │   │   ├── compiler_test.exs            # Compilation pipeline tests
@@ -89,15 +89,15 @@ Expected: Output includes `Mix 1.17.x` (or higher)
 **Files:**
 - Create: `mix.exs`
 - Create: `config/config.exs`
-- Create: `lib/uniops.ex`
-- Create: `lib/uniops/application.ex`
+- Create: `lib/unex.ex`
+- Create: `lib/unex/application.ex`
 - Create: `test/test_helper.exs`
 
 - [ ] **Step 1: Initialize the Mix project**
 
-Run from the repo root (`/Users/ke/lima-workspace/uniops`):
+Run from the repo root (`/Users/ke/lima-workspace/unex`):
 ```bash
-mix new . --app uniops --sup
+mix new . --app unex --sup
 ```
 
 This generates the skeleton. The `--sup` flag includes an Application supervisor. If Mix warns about existing files (like the guide), choose to keep them.
@@ -114,10 +114,10 @@ Replace `config/config.exs` with:
 ```elixir
 import Config
 
-config :uniops,
+config :unex,
   ucm_path: System.get_env("UCM_PATH") || "ucm",
   ucm_timeout: String.to_integer(System.get_env("UCM_TIMEOUT") || "30000"),
-  workspace_base: System.get_env("UNIOPS_WORKSPACE") || Path.join(System.tmp_dir!(), "uniops")
+  workspace_base: System.get_env("UNEX_WORKSPACE") || Path.join(System.tmp_dir!(), "unex")
 ```
 
 - [ ] **Step 4: Update mix.exs with project metadata**
@@ -125,12 +125,12 @@ config :uniops,
 Ensure `mix.exs` has:
 
 ```elixir
-defmodule Uniops.MixProject do
+defmodule Unex.MixProject do
   use Mix.Project
 
   def project do
     [
-      app: :uniops,
+      app: :unex,
       version: "0.1.0",
       elixir: "~> 1.17",
       start_permanent: Mix.env() == :prod,
@@ -142,7 +142,7 @@ defmodule Uniops.MixProject do
   def application do
     [
       extra_applications: [:logger],
-      mod: {Uniops.Application, []}
+      mod: {Unex.Application, []}
     ]
   end
 
@@ -156,17 +156,17 @@ end
 
 - [ ] **Step 5: Set up the Application module**
 
-Replace `lib/uniops/application.ex` with:
+Replace `lib/unex/application.ex` with:
 
 ```elixir
-defmodule Uniops.Application do
+defmodule Unex.Application do
   use Application
 
   @impl true
   def start(_type, _args) do
     children = []
 
-    opts = [strategy: :one_for_one, name: Uniops.Supervisor]
+    opts = [strategy: :one_for_one, name: Unex.Supervisor]
     Supervisor.start_link(children, opts)
   end
 end
@@ -174,10 +174,10 @@ end
 
 - [ ] **Step 6: Set up the public API module**
 
-Replace `lib/uniops.ex` with:
+Replace `lib/unex.ex` with:
 
 ```elixir
-defmodule Uniops do
+defmodule Unex do
   @moduledoc """
   Open-source ops platform and distribution system for Unison.
   """
@@ -201,38 +201,38 @@ jj new
 ### Task 3: UCM Binary Detection and Version Check
 
 **Files:**
-- Create: `lib/uniops/ucm.ex`
-- Create: `test/uniops/ucm_test.exs`
+- Create: `lib/unex/ucm.ex`
+- Create: `test/unex/ucm_test.exs`
 
 - [ ] **Step 1: Write the failing test for UCM detection**
 
-Create `test/uniops/ucm_test.exs`:
+Create `test/unex/ucm_test.exs`:
 
 ```elixir
-defmodule Uniops.UCMTest do
+defmodule Unex.UCMTest do
   use ExUnit.Case, async: true
 
   describe "find/0" do
     test "returns path to ucm binary" do
-      assert {:ok, path} = Uniops.UCM.find()
+      assert {:ok, path} = Unex.UCM.find()
       assert File.exists?(path)
     end
 
     test "returns error when binary not found" do
-      assert {:error, :not_found} = Uniops.UCM.find(name: "ucm_nonexistent_binary")
+      assert {:error, :not_found} = Unex.UCM.find(name: "ucm_nonexistent_binary")
     end
   end
 
   describe "version/0" do
     test "returns the UCM version string" do
-      assert {:ok, version} = Uniops.UCM.version()
+      assert {:ok, version} = Unex.UCM.version()
       assert version =~ ~r/\d+\.\d+\.\d+/
     end
   end
 
   describe "check!/0" do
     test "returns :ok when UCM is available" do
-      assert :ok = Uniops.UCM.check!()
+      assert :ok = Unex.UCM.check!()
     end
   end
 end
@@ -240,15 +240,15 @@ end
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `mix test test/uniops/ucm_test.exs`
-Expected: FAIL — `Uniops.UCM` module not found
+Run: `mix test test/unex/ucm_test.exs`
+Expected: FAIL — `Unex.UCM` module not found
 
 - [ ] **Step 3: Implement UCM detection**
 
-Create `lib/uniops/ucm.ex`:
+Create `lib/unex/ucm.ex`:
 
 ```elixir
-defmodule Uniops.UCM do
+defmodule Unex.UCM do
   @moduledoc """
   Detects and validates the UCM (Unison Codebase Manager) binary.
   """
@@ -294,14 +294,14 @@ defmodule Uniops.UCM do
   end
 
   defp configured_path do
-    Application.get_env(:uniops, :ucm_path, "ucm")
+    Application.get_env(:unex, :ucm_path, "ucm")
   end
 end
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `mix test test/uniops/ucm_test.exs`
+Run: `mix test test/unex/ucm_test.exs`
 Expected: 4 tests, 0 failures
 
 - [ ] **Step 5: Commit**
@@ -316,21 +316,21 @@ jj new
 ### Task 4: Workspace Management
 
 **Files:**
-- Create: `lib/uniops/workspace.ex`
-- Create: `test/uniops/workspace_test.exs`
+- Create: `lib/unex/workspace.ex`
+- Create: `test/unex/workspace_test.exs`
 
 A workspace is an isolated directory containing a Unison codebase. Workspaces are used for compilation and execution. Each workspace has its own UCM codebase initialized via `ucm --codebase-create`.
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `test/uniops/workspace_test.exs`:
+Create `test/unex/workspace_test.exs`:
 
 ```elixir
-defmodule Uniops.WorkspaceTest do
+defmodule Unex.WorkspaceTest do
   use ExUnit.Case, async: false
 
   setup do
-    dir = Path.join(System.tmp_dir!(), "uniops_test_#{:rand.uniform(1_000_000)}")
+    dir = Path.join(System.tmp_dir!(), "unex_test_#{:rand.uniform(1_000_000)}")
     on_cleanup = fn -> File.rm_rf!(dir) end
 
     on_exit(on_cleanup)
@@ -339,7 +339,7 @@ defmodule Uniops.WorkspaceTest do
 
   describe "create/1" do
     test "creates a workspace directory with a Unison codebase", %{dir: dir} do
-      assert {:ok, workspace} = Uniops.Workspace.create(dir)
+      assert {:ok, workspace} = Unex.Workspace.create(dir)
       assert workspace.path == dir
       assert File.dir?(dir)
     end
@@ -347,13 +347,13 @@ defmodule Uniops.WorkspaceTest do
 
   describe "write_source/3" do
     test "writes a .u file into the workspace", %{dir: dir} do
-      {:ok, workspace} = Uniops.Workspace.create(dir)
+      {:ok, workspace} = Unex.Workspace.create(dir)
       source = """
       myMain : '{IO, Exception} ()
       myMain = do printLine "hello"
       """
 
-      assert {:ok, file_path} = Uniops.Workspace.write_source(workspace, "scratch.u", source)
+      assert {:ok, file_path} = Unex.Workspace.write_source(workspace, "scratch.u", source)
       assert File.exists?(file_path)
       assert File.read!(file_path) == source
     end
@@ -361,8 +361,8 @@ defmodule Uniops.WorkspaceTest do
 
   describe "destroy/1" do
     test "removes the workspace directory", %{dir: dir} do
-      {:ok, workspace} = Uniops.Workspace.create(dir)
-      assert :ok = Uniops.Workspace.destroy(workspace)
+      {:ok, workspace} = Unex.Workspace.create(dir)
+      assert :ok = Unex.Workspace.destroy(workspace)
       refute File.dir?(dir)
     end
   end
@@ -371,15 +371,15 @@ end
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `mix test test/uniops/workspace_test.exs`
-Expected: FAIL — `Uniops.Workspace` module not found
+Run: `mix test test/unex/workspace_test.exs`
+Expected: FAIL — `Unex.Workspace` module not found
 
 - [ ] **Step 3: Implement workspace management**
 
-Create `lib/uniops/workspace.ex`:
+Create `lib/unex/workspace.ex`:
 
 ```elixir
-defmodule Uniops.Workspace do
+defmodule Unex.Workspace do
   @moduledoc """
   Manages isolated Unison workspace directories containing codebases.
   """
@@ -416,7 +416,7 @@ defmodule Uniops.Workspace do
   end
 
   defp init_codebase(path) do
-    {:ok, ucm} = Uniops.UCM.find()
+    {:ok, ucm} = Unex.UCM.find()
     codebase_path = Path.join(path, ".unison")
 
     unless File.dir?(codebase_path) do
@@ -431,7 +431,7 @@ end
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `mix test test/uniops/workspace_test.exs`
+Run: `mix test test/unex/workspace_test.exs`
 Expected: 3 tests, 0 failures
 
 - [ ] **Step 5: Commit**
@@ -446,23 +446,23 @@ jj new
 ### Task 5: Unison Code Runner (run.file)
 
 **Files:**
-- Create: `lib/uniops/runner.ex`
-- Create: `test/uniops/runner_test.exs`
+- Create: `lib/unex/runner.ex`
+- Create: `test/unex/runner_test.exs`
 
 UCM's `run.file` command executes a Unison function directly from a `.u` file without needing to add it to a codebase first. This is the simplest execution mode and ideal for quick one-off computations.
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `test/uniops/runner_test.exs`:
+Create `test/unex/runner_test.exs`:
 
 ```elixir
-defmodule Uniops.RunnerTest do
+defmodule Unex.RunnerTest do
   use ExUnit.Case, async: false
 
   setup do
-    dir = Path.join(System.tmp_dir!(), "uniops_runner_#{:rand.uniform(1_000_000)}")
-    {:ok, workspace} = Uniops.Workspace.create(dir)
-    on_exit(fn -> Uniops.Workspace.destroy(workspace) end)
+    dir = Path.join(System.tmp_dir!(), "unex_runner_#{:rand.uniform(1_000_000)}")
+    {:ok, workspace} = Unex.Workspace.create(dir)
+    on_exit(fn -> Unex.Workspace.destroy(workspace) end)
     %{workspace: workspace}
   end
 
@@ -470,13 +470,13 @@ defmodule Uniops.RunnerTest do
     test "executes a Unison function from a .u file and captures stdout", %{workspace: ws} do
       source = """
       myMain : '{IO, Exception} ()
-      myMain = do printLine "hello from uniops"
+      myMain = do printLine "hello from unex"
       """
 
-      {:ok, file_path} = Uniops.Workspace.write_source(ws, "hello.u", source)
+      {:ok, file_path} = Unex.Workspace.write_source(ws, "hello.u", source)
 
-      assert {:ok, result} = Uniops.Runner.run_file(file_path, "myMain", codebase: ws.path)
-      assert result.stdout =~ "hello from uniops"
+      assert {:ok, result} = Unex.Runner.run_file(file_path, "myMain", codebase: ws.path)
+      assert result.stdout =~ "hello from unex"
       assert result.exit_code == 0
     end
 
@@ -486,9 +486,9 @@ defmodule Uniops.RunnerTest do
       broken = "not a nat"
       """
 
-      {:ok, file_path} = Uniops.Workspace.write_source(ws, "broken.u", source)
+      {:ok, file_path} = Unex.Workspace.write_source(ws, "broken.u", source)
 
-      assert {:error, result} = Uniops.Runner.run_file(file_path, "broken", codebase: ws.path)
+      assert {:error, result} = Unex.Runner.run_file(file_path, "broken", codebase: ws.path)
       assert result.exit_code != 0
     end
   end
@@ -500,12 +500,12 @@ defmodule Uniops.RunnerTest do
       myMain = do printLine "compiled hello"
       """
 
-      {:ok, file_path} = Uniops.Workspace.write_source(ws, "compiled_test.u", source)
+      {:ok, file_path} = Unex.Workspace.write_source(ws, "compiled_test.u", source)
 
       # First compile via transcript, then run compiled
-      {:ok, uc_path} = Uniops.Compiler.compile(ws, file_path, "myMain", "compiled_test")
+      {:ok, uc_path} = Unex.Compiler.compile(ws, file_path, "myMain", "compiled_test")
 
-      assert {:ok, result} = Uniops.Runner.run_compiled(uc_path)
+      assert {:ok, result} = Unex.Runner.run_compiled(uc_path)
       assert result.stdout =~ "compiled hello"
       assert result.exit_code == 0
     end
@@ -515,15 +515,15 @@ end
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `mix test test/uniops/runner_test.exs`
-Expected: FAIL — `Uniops.Runner` module not found
+Run: `mix test test/unex/runner_test.exs`
+Expected: FAIL — `Unex.Runner` module not found
 
 - [ ] **Step 3: Implement the runner**
 
-Create `lib/uniops/runner.ex`:
+Create `lib/unex/runner.ex`:
 
 ```elixir
-defmodule Uniops.Runner do
+defmodule Unex.Runner do
   @moduledoc """
   Executes Unison code via UCM's run.file and run.compiled commands.
   """
@@ -548,7 +548,7 @@ defmodule Uniops.Runner do
     - `:args` - list of string arguments to pass to the program
   """
   def run_file(file_path, symbol, opts \\ []) do
-    {:ok, ucm} = Uniops.UCM.find()
+    {:ok, ucm} = Unex.UCM.find()
     timeout = Keyword.get(opts, :timeout, configured_timeout())
     args = Keyword.get(opts, :args, [])
     codebase = Keyword.get(opts, :codebase)
@@ -569,7 +569,7 @@ defmodule Uniops.Runner do
     - `:args` - list of string arguments to pass to the program
   """
   def run_compiled(uc_path, opts \\ []) do
-    {:ok, ucm} = Uniops.UCM.find()
+    {:ok, ucm} = Unex.UCM.find()
     timeout = Keyword.get(opts, :timeout, configured_timeout())
     args = Keyword.get(opts, :args, [])
 
@@ -620,18 +620,18 @@ defmodule Uniops.Runner do
   end
 
   defp configured_timeout do
-    Application.get_env(:uniops, :ucm_timeout, 30_000)
+    Application.get_env(:unex, :ucm_timeout, 30_000)
   end
 end
 ```
 
 - [ ] **Step 4: Run the run_file tests (skip run_compiled for now — depends on Compiler)**
 
-Run: `mix test test/uniops/runner_test.exs --exclude "run_compiled"`
+Run: `mix test test/unex/runner_test.exs --exclude "run_compiled"`
 
 If ExUnit doesn't support `--exclude` by test name, run just the first describe block:
-Run: `mix test test/uniops/runner_test.exs:12`
-Expected: 2 tests pass (the `run_file` tests). The `run_compiled` test will fail because `Uniops.Compiler` doesn't exist yet — that's expected and will be fixed in Task 6.
+Run: `mix test test/unex/runner_test.exs:12`
+Expected: 2 tests pass (the `run_file` tests). The `run_compiled` test will fail because `Unex.Compiler` doesn't exist yet — that's expected and will be fixed in Task 6.
 
 - [ ] **Step 5: Commit**
 
@@ -645,23 +645,23 @@ jj new
 ### Task 6: Bytecode Compiler (transcript-based)
 
 **Files:**
-- Create: `lib/uniops/compiler.ex`
-- Create: `test/uniops/compiler_test.exs`
+- Create: `lib/unex/compiler.ex`
+- Create: `test/unex/compiler_test.exs`
 
 Compilation uses UCM's transcript mode. We generate a markdown transcript file that loads code into a temporary project and compiles it to a `.uc` file, then execute the transcript via `ucm transcript`.
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `test/uniops/compiler_test.exs`:
+Create `test/unex/compiler_test.exs`:
 
 ```elixir
-defmodule Uniops.CompilerTest do
+defmodule Unex.CompilerTest do
   use ExUnit.Case, async: false
 
   setup do
-    dir = Path.join(System.tmp_dir!(), "uniops_compiler_#{:rand.uniform(1_000_000)}")
-    {:ok, workspace} = Uniops.Workspace.create(dir)
-    on_exit(fn -> Uniops.Workspace.destroy(workspace) end)
+    dir = Path.join(System.tmp_dir!(), "unex_compiler_#{:rand.uniform(1_000_000)}")
+    {:ok, workspace} = Unex.Workspace.create(dir)
+    on_exit(fn -> Unex.Workspace.destroy(workspace) end)
     %{workspace: workspace}
   end
 
@@ -672,9 +672,9 @@ defmodule Uniops.CompilerTest do
       myMain = do printLine "compiled"
       """
 
-      {:ok, file_path} = Uniops.Workspace.write_source(ws, "compile_me.u", source)
+      {:ok, file_path} = Unex.Workspace.write_source(ws, "compile_me.u", source)
 
-      assert {:ok, uc_path} = Uniops.Compiler.compile(ws, file_path, "myMain", "output")
+      assert {:ok, uc_path} = Unex.Compiler.compile(ws, file_path, "myMain", "output")
       assert File.exists?(uc_path)
       assert String.ends_with?(uc_path, ".uc")
     end
@@ -685,9 +685,9 @@ defmodule Uniops.CompilerTest do
       broken = "oops"
       """
 
-      {:ok, file_path} = Uniops.Workspace.write_source(ws, "broken.u", source)
+      {:ok, file_path} = Unex.Workspace.write_source(ws, "broken.u", source)
 
-      assert {:error, _reason} = Uniops.Compiler.compile(ws, file_path, "broken", "broken_out")
+      assert {:error, _reason} = Unex.Compiler.compile(ws, file_path, "broken", "broken_out")
     end
   end
 end
@@ -695,15 +695,15 @@ end
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `mix test test/uniops/compiler_test.exs`
-Expected: FAIL — `Uniops.Compiler` module not found
+Run: `mix test test/unex/compiler_test.exs`
+Expected: FAIL — `Unex.Compiler` module not found
 
 - [ ] **Step 3: Implement the compiler**
 
-Create `lib/uniops/compiler.ex`:
+Create `lib/unex/compiler.ex`:
 
 ```elixir
-defmodule Uniops.Compiler do
+defmodule Unex.Compiler do
   @moduledoc """
   Compiles Unison source code to .uc bytecode using UCM transcript mode.
   """
@@ -711,15 +711,15 @@ defmodule Uniops.Compiler do
   @doc """
   Compiles a Unison function from a source file into a .uc bytecode file.
 
-  - `workspace` - the Uniops.Workspace struct
+  - `workspace` - the Unex.Workspace struct
   - `source_path` - path to the .u source file
   - `symbol` - the function name to compile (e.g., "myMain")
   - `output_name` - name for the output file (without .uc extension)
 
   Returns `{:ok, uc_path}` or `{:error, reason}`.
   """
-  def compile(%Uniops.Workspace{path: ws_path} = _workspace, source_path, symbol, output_name) do
-    {:ok, ucm} = Uniops.UCM.find()
+  def compile(%Unex.Workspace{path: ws_path} = _workspace, source_path, symbol, output_name) do
+    {:ok, ucm} = Unex.UCM.find()
     source = File.read!(source_path)
 
     # Build a transcript that loads the code, adds it, and compiles it
@@ -729,7 +729,7 @@ defmodule Uniops.Compiler do
     File.write!(transcript_path, transcript)
 
     codebase_path = Path.join(ws_path, ".unison")
-    timeout = Application.get_env(:uniops, :ucm_timeout, 60_000)
+    timeout = Application.get_env(:unex, :ucm_timeout, 60_000)
 
     case System.cmd(ucm, ["transcript", "--save-codebase", "--codebase", codebase_path, transcript_path],
            cd: ws_path,
@@ -785,7 +785,7 @@ end
 
 - [ ] **Step 4: Run the compiler tests**
 
-Run: `mix test test/uniops/compiler_test.exs`
+Run: `mix test test/unex/compiler_test.exs`
 Expected: 2 tests, 0 failures
 
 Note: If the transcript format doesn't work as expected with UCM 1.1.1, adjust the `build_transcript/3` function. The `builtins.mergeio` command ensures IO abilities are available. The transcript format may need tweaking based on UCM's exact behavior — check `ucm transcript --help` and the transcript output for clues.
@@ -802,19 +802,19 @@ jj new
 ### Task 7: Complete the run_compiled Test
 
 **Files:**
-- Modify: `test/uniops/runner_test.exs`
+- Modify: `test/unex/runner_test.exs`
 
 Now that the Compiler exists, the `run_compiled` test from Task 5 should pass.
 
 - [ ] **Step 1: Run the full runner test suite**
 
-Run: `mix test test/uniops/runner_test.exs`
+Run: `mix test test/unex/runner_test.exs`
 Expected: 3 tests, 0 failures (including the `run_compiled` test that compiles first, then runs)
 
 - [ ] **Step 2: If the run_compiled test fails, debug**
 
 Check:
-1. Does `Uniops.Compiler.compile/4` produce a valid `.uc` file? Run `mix test test/uniops/compiler_test.exs -v` to verify.
+1. Does `Unex.Compiler.compile/4` produce a valid `.uc` file? Run `mix test test/unex/compiler_test.exs -v` to verify.
 2. Is the `.uc` path correct? Add `IO.inspect(uc_path, label: "uc_path")` temporarily.
 3. Does `ucm run.compiled <path>` work manually? Run it in a terminal.
 
@@ -832,7 +832,7 @@ jj new
 ### Task 8: Public API Facade
 
 **Files:**
-- Modify: `lib/uniops.ex`
+- Modify: `lib/unex.ex`
 - Create: `test/integration/end_to_end_test.exs`
 
 Expose a clean top-level API that composes workspace, compiler, and runner.
@@ -842,7 +842,7 @@ Expose a clean top-level API that composes workspace, compiler, and runner.
 Create `test/integration/end_to_end_test.exs`:
 
 ```elixir
-defmodule Uniops.Integration.EndToEndTest do
+defmodule Unex.Integration.EndToEndTest do
   use ExUnit.Case, async: false
 
   describe "eval/2" do
@@ -852,7 +852,7 @@ defmodule Uniops.Integration.EndToEndTest do
       main = do printLine "42"
       """
 
-      assert {:ok, result} = Uniops.eval(source)
+      assert {:ok, result} = Unex.eval(source)
       assert result.stdout =~ "42"
     end
 
@@ -862,7 +862,7 @@ defmodule Uniops.Integration.EndToEndTest do
       greet = do printLine "hi there"
       """
 
-      assert {:ok, result} = Uniops.eval(source, entry: "greet")
+      assert {:ok, result} = Unex.eval(source, entry: "greet")
       assert result.stdout =~ "hi there"
     end
   end
@@ -874,7 +874,7 @@ defmodule Uniops.Integration.EndToEndTest do
       main = do printLine "bytecode works"
       """
 
-      assert {:ok, result} = Uniops.compile_and_run(source)
+      assert {:ok, result} = Unex.compile_and_run(source)
       assert result.stdout =~ "bytecode works"
     end
   end
@@ -884,14 +884,14 @@ end
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `mix test test/integration/end_to_end_test.exs`
-Expected: FAIL — `Uniops.eval/2` not defined
+Expected: FAIL — `Unex.eval/2` not defined
 
 - [ ] **Step 3: Implement the facade**
 
-Replace `lib/uniops.ex` with:
+Replace `lib/unex.ex` with:
 
 ```elixir
-defmodule Uniops do
+defmodule Unex do
   @moduledoc """
   Open-source ops platform and distribution system for Unison.
 
@@ -910,8 +910,8 @@ defmodule Uniops do
     entry = Keyword.get(opts, :entry, "main")
 
     with_workspace(fn workspace ->
-      {:ok, file_path} = Uniops.Workspace.write_source(workspace, "eval.u", source)
-      Uniops.Runner.run_file(file_path, entry, Keyword.merge(opts, codebase: workspace.path))
+      {:ok, file_path} = Unex.Workspace.write_source(workspace, "eval.u", source)
+      Unex.Runner.run_file(file_path, entry, Keyword.merge(opts, codebase: workspace.path))
     end)
   end
 
@@ -927,10 +927,10 @@ defmodule Uniops do
     entry = Keyword.get(opts, :entry, "main")
 
     with_workspace(fn workspace ->
-      {:ok, file_path} = Uniops.Workspace.write_source(workspace, "program.u", source)
+      {:ok, file_path} = Unex.Workspace.write_source(workspace, "program.u", source)
 
-      case Uniops.Compiler.compile(workspace, file_path, entry, "program") do
-        {:ok, uc_path} -> Uniops.Runner.run_compiled(uc_path, opts)
+      case Unex.Compiler.compile(workspace, file_path, entry, "program") do
+        {:ok, uc_path} -> Unex.Runner.run_compiled(uc_path, opts)
         {:error, _} = err -> err
       end
     end)
@@ -938,17 +938,17 @@ defmodule Uniops do
 
   defp with_workspace(fun) do
     dir = Path.join(workspace_base(), "ws_#{:rand.uniform(1_000_000_000)}")
-    {:ok, workspace} = Uniops.Workspace.create(dir)
+    {:ok, workspace} = Unex.Workspace.create(dir)
 
     try do
       fun.(workspace)
     after
-      Uniops.Workspace.destroy(workspace)
+      Unex.Workspace.destroy(workspace)
     end
   end
 
   defp workspace_base do
-    Application.get_env(:uniops, :workspace_base, Path.join(System.tmp_dir!(), "uniops"))
+    Application.get_env(:unex, :workspace_base, Path.join(System.tmp_dir!(), "unex"))
   end
 end
 ```
@@ -989,7 +989,7 @@ Expected: Clean compilation with no warnings
 
 - [ ] **Step 3: Verify the application starts correctly**
 
-Run: `mix run -e "IO.inspect Uniops.UCM.version()"`
+Run: `mix run -e "IO.inspect Unex.UCM.version()"`
 Expected: `{:ok, "1.1.1"}` (or current UCM version)
 
 - [ ] **Step 4: Run a manual smoke test**
@@ -999,13 +999,13 @@ Run:
 mix run -e '
 source = """
 main : \'{IO, Exception} ()
-main = do printLine "Uniops is alive!"
+main = do printLine "Unex is alive!"
 """
-{:ok, result} = Uniops.eval(source)
+{:ok, result} = Unex.eval(source)
 IO.puts(result.stdout)
 '
 ```
-Expected: `Uniops is alive!` printed to stdout
+Expected: `Unex is alive!` printed to stdout
 
 - [ ] **Step 5: Commit the final state**
 
@@ -1019,12 +1019,12 @@ jj desc -m "Complete Plan 1: Elixir shell with UCM integration"
 
 After completing all tasks, you have:
 
-1. **An Elixir OTP application** (`uniops`) that starts cleanly
+1. **An Elixir OTP application** (`unex`) that starts cleanly
 2. **UCM detection** — finds UCM on PATH, checks version
 3. **Workspace management** — creates/destroys isolated Unison codebase directories
 4. **Two execution modes:**
-   - `Uniops.eval/2` — quick evaluation via `ucm run.file` (no compilation)
-   - `Uniops.compile_and_run/2` — compile to `.uc` bytecode then execute
+   - `Unex.eval/2` — quick evaluation via `ucm run.file` (no compilation)
+   - `Unex.compile_and_run/2` — compile to `.uc` bytecode then execute
 5. **A test suite** covering all modules with both unit and integration tests
 
 This foundation supports all subsequent plans. Plan 2 (Storage handlers) will add Unison ability handler code that runs through this same pipeline. Plan 3 (Clustering) will extend the Application supervision tree with BEAM distribution.

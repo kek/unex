@@ -4,9 +4,9 @@
 
 **Goal:** Enable executing compiled Unison bytecode on any node in the cluster — the `Remote.fork` equivalent that ships a computation to a peer, syncs its dependencies, runs it, and returns the result.
 
-**Architecture:** A single `Uniops.Remote` module (no GenServer needed) coordinates the existing building blocks: `SyncServer.resolve/1` ensures bytecode is available on the target node, `Runner.run_compiled/2` executes it, and `:rpc.call/5` bridges across nodes. `execute/2` runs a hash on a specific node, `submit/2` picks a peer automatically. All synchronous — the caller blocks until the result arrives.
+**Architecture:** A single `Unex.Remote` module (no GenServer needed) coordinates the existing building blocks: `SyncServer.resolve/1` ensures bytecode is available on the target node, `Runner.run_compiled/2` executes it, and `:rpc.call/5` bridges across nodes. `execute/2` runs a hash on a specific node, `submit/2` picks a peer automatically. All synchronous — the caller blocks until the result arrives.
 
-**Tech Stack:** Elixir 1.19 / OTP 28, existing Uniops modules (HashCache, SyncServer, Runner), `:rpc` for cross-node calls, `:peer` for testing
+**Tech Stack:** Elixir 1.19 / OTP 28, existing Unex modules (HashCache, SyncServer, Runner), `:rpc` for cross-node calls, `:peer` for testing
 
 ---
 
@@ -31,10 +31,10 @@ What it does **not** cover:
 
 ```
 lib/
-  uniops/
+  unex/
     remote.ex                       # Public API: execute, submit, do_execute (called via RPC)
 test/
-  uniops/
+  unex/
     remote_test.exs                 # Local execution tests
   integration/
     remote_execute_test.exs         # Multi-node: compile on A, execute on B via Remote
@@ -45,17 +45,17 @@ test/
 ### Task 1: Remote Module — Local Execution
 
 **Files:**
-- Create: `lib/uniops/remote.ex`
-- Create: `test/uniops/remote_test.exs`
+- Create: `lib/unex/remote.ex`
+- Create: `test/unex/remote_test.exs`
 
 Start with local execution — `execute/2` with no `:node` option runs locally.
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `test/uniops/remote_test.exs`:
+Create `test/unex/remote_test.exs`:
 
 ```elixir
-defmodule Uniops.RemoteTest do
+defmodule Unex.RemoteTest do
   use ExUnit.Case, async: false
 
   @moduletag timeout: 120_000
@@ -67,27 +67,27 @@ defmodule Uniops.RemoteTest do
     main = do printLine "remote-ok"
     """
 
-    dir = Path.join(System.tmp_dir!(), "uniops_remote_test_#{System.unique_integer([:positive])}")
-    {:ok, workspace} = Uniops.Workspace.create(dir)
-    {:ok, file_path} = Uniops.Workspace.write_source(workspace, "program.u", source)
-    {:ok, uc_path} = Uniops.Compiler.compile(workspace, file_path, "main", "program")
+    dir = Path.join(System.tmp_dir!(), "unex_remote_test_#{System.unique_integer([:positive])}")
+    {:ok, workspace} = Unex.Workspace.create(dir)
+    {:ok, file_path} = Unex.Workspace.write_source(workspace, "program.u", source)
+    {:ok, uc_path} = Unex.Compiler.compile(workspace, file_path, "main", "program")
 
     uc_bytes = File.read!(uc_path)
-    hash = Uniops.Cluster.HashCache.put(uc_bytes)
+    hash = Unex.Cluster.HashCache.put(uc_bytes)
 
-    on_exit(fn -> Uniops.Workspace.destroy(workspace) end)
+    on_exit(fn -> Unex.Workspace.destroy(workspace) end)
 
     %{hash: hash}
   end
 
   describe "execute/2 (local)" do
     test "executes bytecode by hash on the local node", %{hash: hash} do
-      assert {:ok, result} = Uniops.Remote.execute(hash)
+      assert {:ok, result} = Unex.Remote.execute(hash)
       assert result.stdout =~ "remote-ok"
     end
 
     test "returns error for unknown hash" do
-      assert {:error, _} = Uniops.Remote.execute("0000000000000000000000000000000000000000000000000000000000000000")
+      assert {:error, _} = Unex.Remote.execute("0000000000000000000000000000000000000000000000000000000000000000")
     end
   end
 end
@@ -95,15 +95,15 @@ end
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `mix test test/uniops/remote_test.exs`
-Expected: FAIL — `Uniops.Remote` not found
+Run: `mix test test/unex/remote_test.exs`
+Expected: FAIL — `Unex.Remote` not found
 
 - [ ] **Step 3: Implement the Remote module**
 
-Create `lib/uniops/remote.ex`:
+Create `lib/unex/remote.ex`:
 
 ```elixir
-defmodule Uniops.Remote do
+defmodule Unex.Remote do
   @moduledoc """
   Executes compiled Unison bytecode on local or remote cluster nodes.
 
@@ -160,7 +160,7 @@ defmodule Uniops.Remote do
   4. Cleans up the temp file
   """
   def do_execute(hash, opts \\ []) do
-    case Uniops.Cluster.SyncServer.resolve([hash]) do
+    case Unex.Cluster.SyncServer.resolve([hash]) do
       {:ok, resolved} ->
         bytecode = Map.fetch!(resolved, hash)
         run_bytecode(hash, bytecode, opts)
@@ -171,11 +171,11 @@ defmodule Uniops.Remote do
   end
 
   defp run_bytecode(hash, bytecode, opts) do
-    path = Path.join(System.tmp_dir!(), "uniops_exec_#{hash}.uc")
+    path = Path.join(System.tmp_dir!(), "unex_exec_#{hash}.uc")
     File.write!(path, bytecode)
 
     try do
-      Uniops.Runner.run_compiled(path, Keyword.take(opts, [:timeout, :args]))
+      Unex.Runner.run_compiled(path, Keyword.take(opts, [:timeout, :args]))
     after
       File.rm(path)
     end
@@ -185,7 +185,7 @@ end
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `mix test test/uniops/remote_test.exs`
+Run: `mix test test/unex/remote_test.exs`
 Expected: 2 tests, 0 failures
 
 - [ ] **Step 5: Commit**
@@ -209,16 +209,16 @@ Proves the full pipeline across nodes: compile on node A, execute on node B via 
 Create `test/integration/remote_execute_test.exs`:
 
 ```elixir
-defmodule Uniops.Integration.RemoteExecuteTest do
+defmodule Unex.Integration.RemoteExecuteTest do
   use ExUnit.Case, async: false
 
-  alias Uniops.Cluster.{HashCache, SyncServer}
+  alias Unex.Cluster.{HashCache, SyncServer}
 
   @moduletag timeout: 300_000
 
   setup_all do
     unless Node.alive?() do
-      {:ok, _} = :net_kernel.start([:uniops_remote_test, :shortnames])
+      {:ok, _} = :net_kernel.start([:unex_remote_test, :shortnames])
     end
 
     :ok
@@ -251,20 +251,20 @@ defmodule Uniops.Integration.RemoteExecuteTest do
     main = do printLine "executed-on-peer"
     """
 
-    dir = Path.join(System.tmp_dir!(), "uniops_remote_exec_#{System.unique_integer([:positive])}")
-    {:ok, workspace} = Uniops.Workspace.create(dir)
-    {:ok, file_path} = Uniops.Workspace.write_source(workspace, "program.u", source)
-    {:ok, uc_path} = Uniops.Compiler.compile(workspace, file_path, "main", "program")
+    dir = Path.join(System.tmp_dir!(), "unex_remote_exec_#{System.unique_integer([:positive])}")
+    {:ok, workspace} = Unex.Workspace.create(dir)
+    {:ok, file_path} = Unex.Workspace.write_source(workspace, "program.u", source)
+    {:ok, uc_path} = Unex.Compiler.compile(workspace, file_path, "main", "program")
 
     # Cache bytecode locally
     uc_bytes = File.read!(uc_path)
     hash = HashCache.put(uc_bytes)
 
     # Execute on peer — peer will pull bytecode from us via SyncServer
-    assert {:ok, result} = Uniops.Remote.execute(hash, node: peer, timeout: 120_000)
+    assert {:ok, result} = Unex.Remote.execute(hash, node: peer, timeout: 120_000)
     assert result.stdout =~ "executed-on-peer"
 
-    Uniops.Workspace.destroy(workspace)
+    Unex.Workspace.destroy(workspace)
   end
 
   test "submit picks a peer and executes", %{peer: peer} do
@@ -274,25 +274,25 @@ defmodule Uniops.Integration.RemoteExecuteTest do
     main = do printLine "submitted-ok"
     """
 
-    dir = Path.join(System.tmp_dir!(), "uniops_submit_#{System.unique_integer([:positive])}")
-    {:ok, workspace} = Uniops.Workspace.create(dir)
-    {:ok, file_path} = Uniops.Workspace.write_source(workspace, "program.u", source)
-    {:ok, uc_path} = Uniops.Compiler.compile(workspace, file_path, "main", "program")
+    dir = Path.join(System.tmp_dir!(), "unex_submit_#{System.unique_integer([:positive])}")
+    {:ok, workspace} = Unex.Workspace.create(dir)
+    {:ok, file_path} = Unex.Workspace.write_source(workspace, "program.u", source)
+    {:ok, uc_path} = Unex.Compiler.compile(workspace, file_path, "main", "program")
 
     hash = HashCache.put(File.read!(uc_path))
 
     # Submit — should pick the peer (only connected node)
-    assert {:ok, result} = Uniops.Remote.submit(hash, timeout: 120_000)
+    assert {:ok, result} = Unex.Remote.submit(hash, timeout: 120_000)
     assert result.stdout =~ "submitted-ok"
 
-    Uniops.Workspace.destroy(workspace)
+    Unex.Workspace.destroy(workspace)
   end
 
   test "execute returns error for unreachable node" do
     hash = HashCache.put(<<"fake bytecode">>)
 
     assert {:error, {:rpc_failed, :nonexistent@nohost, _}} =
-             Uniops.Remote.execute(hash, node: :nonexistent@nohost, timeout: 5_000)
+             Unex.Remote.execute(hash, node: :nonexistent@nohost, timeout: 5_000)
   end
 end
 ```
@@ -305,7 +305,7 @@ Expected: 3 tests, 0 failures
 **Debugging notes:**
 - If the peer can't execute (`:badrpc`), ensure UCM is on PATH — the peer inherits the same PATH since it's on the same machine.
 - If `do_execute` fails on the peer with `{:error, {:missing, [hash]}}`, the peer's SyncServer isn't connecting to us. Check `Node.list()` on the peer via `:rpc.call(peer, Node, :list, [])`.
-- If `Runner.run_compiled` fails on the peer, it might be because the Runner process tries to find UCM. Verify with `:rpc.call(peer, Uniops.UCM, :find, [])`.
+- If `Runner.run_compiled` fails on the peer, it might be because the Runner process tries to find UCM. Verify with `:rpc.call(peer, Unex.UCM, :find, [])`.
 
 - [ ] **Step 3: Commit**
 
@@ -332,7 +332,7 @@ Expected: Clean compilation
 
 - [ ] **Step 3: Run just the remote tests with trace**
 
-Run: `mix test test/uniops/remote_test.exs test/integration/remote_execute_test.exs --trace`
+Run: `mix test test/unex/remote_test.exs test/integration/remote_execute_test.exs --trace`
 Expected: 5 tests, 0 failures
 
 - [ ] **Step 4: Commit final state**
@@ -345,9 +345,9 @@ jj desc -m "Complete Plan 4: Remote handler for cross-node computation"
 
 ## What This Plan Produces
 
-1. **`Uniops.Remote.execute/2`** — execute bytecode (by hash) on any node in the cluster
-2. **`Uniops.Remote.submit/2`** — execute on any available peer (random selection)
-3. **`Uniops.Remote.do_execute/2`** — the local execution path (also callable via RPC)
+1. **`Unex.Remote.execute/2`** — execute bytecode (by hash) on any node in the cluster
+2. **`Unex.Remote.submit/2`** — execute on any available peer (random selection)
+3. **`Unex.Remote.do_execute/2`** — the local execution path (also callable via RPC)
 4. **Proven multi-node execution** — compile on A, execute on B, result returned to A
 
 This completes the core computation-shipping capability. Combined with Plans 1-3:

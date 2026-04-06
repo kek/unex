@@ -1,15 +1,15 @@
-defmodule Uniops.Integration.ClusterSyncTest do
+defmodule Unex.Integration.ClusterSyncTest do
   use ExUnit.Case, async: false
 
-  alias Uniops.Cluster.HashCache
-  alias Uniops.Cluster.SyncServer
+  alias Unex.Cluster.HashCache
+  alias Unex.Cluster.SyncServer
 
   @moduletag timeout: 60_000
 
   setup_all do
     # Ensure this node is distributed
     unless Node.alive?() do
-      {:ok, _} = :net_kernel.start([:uniops_test, :shortnames])
+      {:ok, _} = :net_kernel.start([:unex_test, :shortnames])
     end
 
     :ok
@@ -19,7 +19,7 @@ defmodule Uniops.Integration.ClusterSyncTest do
     # Start a peer node with our code paths (keep as charlists for :peer)
     pa_args = Enum.flat_map(:code.get_path(), fn p -> [~c"-pa", p] end)
 
-    {:ok, pid, peer_node} = :peer.start_link(%{name: :uniops_peer1, args: pa_args})
+    {:ok, pid, peer_node} = :peer.start_link(%{name: :unex_peer1, args: pa_args})
 
     # Start required apps and GenServers on the peer.
     # Use GenServer.start (not start_link) so the process isn't linked to the

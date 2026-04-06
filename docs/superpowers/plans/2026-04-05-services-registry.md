@@ -6,7 +6,7 @@
 
 **Architecture:** A `Services.Registry` GenServer on each node stores name→hash mappings in ETS. `Services.deploy/2` compiles Unison source, caches the bytecode in HashCache, and registers the name→hash mapping. `Services.call/2` looks up the hash by name (checking local registry then peers), then delegates to `Remote.execute/2`. HTTP endpoints at `/services/*` make services accessible to Unison programs via the existing HTTP pattern.
 
-**Tech Stack:** Elixir 1.19 / OTP 28, ETS (registry storage), existing Uniops modules (HashCache, Remote, Compiler, Workspace)
+**Tech Stack:** Elixir 1.19 / OTP 28, ETS (registry storage), existing Unex modules (HashCache, Remote, Compiler, Workspace)
 
 ---
 
@@ -32,7 +32,7 @@ What it does **not** cover:
 
 ```
 lib/
-  uniops/
+  unex/
     services/
       registry.ex                   # GenServer + ETS: name→hash mappings, cross-node lookup
     services.ex                     # Public API: deploy, call, list, undeploy
@@ -40,7 +40,7 @@ lib/
       router.ex                     # Modify: add /services routes
       services_controller.ex        # HTTP handlers for service endpoints
 test/
-  uniops/
+  unex/
     services/
       registry_test.exs             # Registry unit tests
     services_test.exs               # Deploy + call tests (local)
@@ -53,20 +53,20 @@ test/
 ### Task 1: Services Registry
 
 **Files:**
-- Create: `lib/uniops/services/registry.ex`
-- Create: `test/uniops/services/registry_test.exs`
+- Create: `lib/unex/services/registry.ex`
+- Create: `test/unex/services/registry_test.exs`
 
 The Registry is a GenServer owning an ETS table that maps service names to deployment info.
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `test/uniops/services/registry_test.exs`:
+Create `test/unex/services/registry_test.exs`:
 
 ```elixir
-defmodule Uniops.Services.RegistryTest do
+defmodule Unex.Services.RegistryTest do
   use ExUnit.Case, async: false
 
-  alias Uniops.Services.Registry
+  alias Unex.Services.Registry
 
   setup do
     reg = start_supervised!({Registry, name: :test_registry})
@@ -115,15 +115,15 @@ end
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `mix test test/uniops/services/registry_test.exs`
+Run: `mix test test/unex/services/registry_test.exs`
 Expected: FAIL — module not found
 
 - [ ] **Step 3: Implement the Registry**
 
-Create `lib/uniops/services/registry.ex`:
+Create `lib/unex/services/registry.ex`:
 
 ```elixir
-defmodule Uniops.Services.Registry do
+defmodule Unex.Services.Registry do
   @moduledoc """
   GenServer-backed service registry. Maps service names to bytecode hashes
   and deployment metadata. Supports cross-node lookups via the ask-peers pattern.
@@ -240,7 +240,7 @@ end
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `mix test test/uniops/services/registry_test.exs`
+Run: `mix test test/unex/services/registry_test.exs`
 Expected: 5 tests, 0 failures
 
 - [ ] **Step 5: Commit**
@@ -255,18 +255,18 @@ jj new
 ### Task 2: Services Public API
 
 **Files:**
-- Create: `lib/uniops/services.ex`
-- Create: `test/uniops/services_test.exs`
-- Modify: `lib/uniops/application.ex`
+- Create: `lib/unex/services.ex`
+- Create: `test/unex/services_test.exs`
+- Modify: `lib/unex/application.ex`
 
 The public API composes Registry + HashCache + Remote.
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `test/uniops/services_test.exs`:
+Create `test/unex/services_test.exs`:
 
 ```elixir
-defmodule Uniops.ServicesTest do
+defmodule Unex.ServicesTest do
   use ExUnit.Case, async: false
 
   @moduletag timeout: 180_000
@@ -275,12 +275,12 @@ defmodule Uniops.ServicesTest do
     test "deploys Unison source as a named service and calls it" do
       source = "main : '{IO, Exception} ()\nmain = do printLine \"svc-hello\""
 
-      assert {:ok, info} = Uniops.Services.deploy("greeter", source)
+      assert {:ok, info} = Unex.Services.deploy("greeter", source)
       assert info.name == "greeter"
       assert is_binary(info.hash)
       assert info.node == node()
 
-      assert {:ok, result} = Uniops.Services.call("greeter")
+      assert {:ok, result} = Unex.Services.call("greeter")
       assert result.stdout =~ "svc-hello"
     end
 
@@ -288,25 +288,25 @@ defmodule Uniops.ServicesTest do
       source_v1 = "main : '{IO, Exception} ()\nmain = do printLine \"v1\""
       source_v2 = "main : '{IO, Exception} ()\nmain = do printLine \"v2\""
 
-      {:ok, info1} = Uniops.Services.deploy("versioned", source_v1)
-      {:ok, info2} = Uniops.Services.deploy("versioned", source_v2)
+      {:ok, info1} = Unex.Services.deploy("versioned", source_v1)
+      {:ok, info2} = Unex.Services.deploy("versioned", source_v2)
       assert info1.hash != info2.hash
 
-      {:ok, result} = Uniops.Services.call("versioned")
+      {:ok, result} = Unex.Services.call("versioned")
       assert result.stdout =~ "v2"
     end
 
     test "calling unknown service returns error" do
-      assert {:error, :not_found} = Uniops.Services.call("nonexistent")
+      assert {:error, :not_found} = Unex.Services.call("nonexistent")
     end
   end
 
   describe "list/0" do
     test "returns deployed services" do
       source = "main : '{IO, Exception} ()\nmain = do printLine \"listed\""
-      Uniops.Services.deploy("listed_svc", source)
+      Unex.Services.deploy("listed_svc", source)
 
-      services = Uniops.Services.list()
+      services = Unex.Services.list()
       names = Enum.map(services, & &1.name)
       assert "listed_svc" in names
     end
@@ -315,9 +315,9 @@ defmodule Uniops.ServicesTest do
   describe "undeploy/1" do
     test "removes a service" do
       source = "main : '{IO, Exception} ()\nmain = do printLine \"bye\""
-      Uniops.Services.deploy("temp_svc", source)
-      assert :ok = Uniops.Services.undeploy("temp_svc")
-      assert {:error, :not_found} = Uniops.Services.call("temp_svc")
+      Unex.Services.deploy("temp_svc", source)
+      assert :ok = Unex.Services.undeploy("temp_svc")
+      assert {:error, :not_found} = Unex.Services.call("temp_svc")
     end
   end
 end
@@ -325,15 +325,15 @@ end
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `mix test test/uniops/services_test.exs`
+Run: `mix test test/unex/services_test.exs`
 Expected: FAIL — module not found
 
 - [ ] **Step 3: Implement the Services module**
 
-Create `lib/uniops/services.ex`:
+Create `lib/unex/services.ex`:
 
 ```elixir
-defmodule Uniops.Services do
+defmodule Unex.Services do
   @moduledoc """
   Deploy compiled Unison programs as named services and call them by name.
 
@@ -342,8 +342,8 @@ defmodule Uniops.Services do
   Calling looks up the hash by name and delegates to Remote.execute.
   """
 
-  alias Uniops.Services.Registry
-  alias Uniops.Cluster.HashCache
+  alias Unex.Services.Registry
+  alias Unex.Cluster.HashCache
 
   @doc """
   Deploys Unison source code as a named service.
@@ -376,7 +376,7 @@ defmodule Uniops.Services do
   def call(name, opts \\ []) do
     case Registry.resolve(name) do
       {:ok, entry} ->
-        Uniops.Remote.execute(entry.hash, opts)
+        Unex.Remote.execute(entry.hash, opts)
 
       :not_found ->
         {:error, :not_found}
@@ -394,13 +394,13 @@ defmodule Uniops.Services do
   end
 
   defp compile_source(source, entry_point) do
-    dir = Path.join(System.tmp_dir!(), "uniops_svc_#{System.unique_integer([:positive])}")
+    dir = Path.join(System.tmp_dir!(), "unex_svc_#{System.unique_integer([:positive])}")
 
-    with {:ok, workspace} <- Uniops.Workspace.create(dir),
-         {:ok, file_path} <- Uniops.Workspace.write_source(workspace, "service.u", source),
-         {:ok, uc_path} <- Uniops.Compiler.compile(workspace, file_path, entry_point, "service") do
+    with {:ok, workspace} <- Unex.Workspace.create(dir),
+         {:ok, file_path} <- Unex.Workspace.write_source(workspace, "service.u", source),
+         {:ok, uc_path} <- Unex.Compiler.compile(workspace, file_path, entry_point, "service") do
       uc_bytes = File.read!(uc_path)
-      Uniops.Workspace.destroy(workspace)
+      Unex.Workspace.destroy(workspace)
       {:ok, uc_bytes}
     else
       {:error, _} = err ->
@@ -413,21 +413,21 @@ end
 
 - [ ] **Step 4: Add Registry to supervision tree**
 
-Update `lib/uniops/application.ex` — add `Uniops.Services.Registry` to `cluster_children`:
+Update `lib/unex/application.ex` — add `Unex.Services.Registry` to `cluster_children`:
 
 ```elixir
   defp cluster_children do
     [
-      Uniops.Cluster.HashCache,
-      Uniops.Cluster.SyncServer,
-      Uniops.Services.Registry
+      Unex.Cluster.HashCache,
+      Unex.Cluster.SyncServer,
+      Unex.Services.Registry
     ]
   end
 ```
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `mix test test/uniops/services_test.exs`
+Run: `mix test test/unex/services_test.exs`
 Expected: 5 tests, 0 failures
 
 - [ ] **Step 6: Commit**
@@ -442,18 +442,18 @@ jj new
 ### Task 3: HTTP API for Services
 
 **Files:**
-- Create: `lib/uniops/api/services_controller.ex`
-- Modify: `lib/uniops/api/router.ex`
-- Create: `test/uniops/api/services_api_test.exs`
+- Create: `lib/unex/api/services_controller.ex`
+- Modify: `lib/unex/api/router.ex`
+- Create: `test/unex/api/services_api_test.exs`
 
 Add HTTP endpoints so Unison programs can deploy and call services via the HTTP API.
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `test/uniops/api/services_api_test.exs`:
+Create `test/unex/api/services_api_test.exs`:
 
 ```elixir
-defmodule Uniops.API.ServicesAPITest do
+defmodule Unex.API.ServicesAPITest do
   use ExUnit.Case, async: false
   use Plug.Test
 
@@ -462,7 +462,7 @@ defmodule Uniops.API.ServicesAPITest do
   defp call(conn) do
     conn
     |> put_req_header("content-type", "application/json")
-    |> Uniops.API.Router.call(Uniops.API.Router.init([]))
+    |> Unex.API.Router.call(Unex.API.Router.init([]))
   end
 
   describe "POST /services/deploy" do
@@ -531,19 +531,19 @@ end
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `mix test test/uniops/api/services_api_test.exs`
+Run: `mix test test/unex/api/services_api_test.exs`
 Expected: FAIL — routes not found (404)
 
 - [ ] **Step 3: Implement the services controller**
 
-Create `lib/uniops/api/services_controller.ex`:
+Create `lib/unex/api/services_controller.ex`:
 
 ```elixir
-defmodule Uniops.API.ServicesController do
+defmodule Unex.API.ServicesController do
   @moduledoc false
 
-  alias Uniops.API.Json
-  alias Uniops.Services
+  alias Unex.API.Json
+  alias Unex.Services
 
   def deploy(conn) do
     {:ok, %{"name" => name, "source" => source}} = Json.read_json(conn)
@@ -597,30 +597,30 @@ end
 
 - [ ] **Step 4: Add routes to the router**
 
-Add these routes to `lib/uniops/api/router.ex`, before the `match _` catch-all:
+Add these routes to `lib/unex/api/router.ex`, before the `match _` catch-all:
 
 ```elixir
   # Service endpoints
   post "/services/deploy" do
-    Uniops.API.ServicesController.deploy(conn)
+    Unex.API.ServicesController.deploy(conn)
   end
 
   post "/services/:name/call" do
-    Uniops.API.ServicesController.call(conn, name)
+    Unex.API.ServicesController.call(conn, name)
   end
 
   get "/services" do
-    Uniops.API.ServicesController.list(conn)
+    Unex.API.ServicesController.list(conn)
   end
 
   delete "/services/:name" do
-    Uniops.API.ServicesController.undeploy(conn, name)
+    Unex.API.ServicesController.undeploy(conn, name)
   end
 ```
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `mix test test/uniops/api/services_api_test.exs`
+Run: `mix test test/unex/api/services_api_test.exs`
 Expected: 5 tests, 0 failures
 
 - [ ] **Step 6: Commit**
@@ -644,17 +644,17 @@ Deploy a service on node A, call it from node B by name.
 Create `test/integration/services_cluster_test.exs`:
 
 ```elixir
-defmodule Uniops.Integration.ServicesClusterTest do
+defmodule Unex.Integration.ServicesClusterTest do
   use ExUnit.Case, async: false
 
-  alias Uniops.Cluster.{HashCache, SyncServer}
-  alias Uniops.Services.Registry
+  alias Unex.Cluster.{HashCache, SyncServer}
+  alias Unex.Services.Registry
 
   @moduletag timeout: 300_000
 
   setup_all do
     unless Node.alive?() do
-      {:ok, _} = :net_kernel.start([:uniops_svc_test, :shortnames])
+      {:ok, _} = :net_kernel.start([:unex_svc_test, :shortnames])
     end
 
     :ok
@@ -682,17 +682,17 @@ defmodule Uniops.Integration.ServicesClusterTest do
 
   test "deploy on local, call from peer by name", %{peer: peer} do
     source = "main : '{IO, Exception} ()\nmain = do printLine \"cross-node-svc\""
-    {:ok, _info} = Uniops.Services.deploy("remote_greeter", source)
+    {:ok, _info} = Unex.Services.deploy("remote_greeter", source)
 
     # Peer calls the service by name — resolves from us
-    result = :rpc.call(peer, Uniops.Services, :call, ["remote_greeter"], 120_000)
+    result = :rpc.call(peer, Unex.Services, :call, ["remote_greeter"], 120_000)
     assert {:ok, run_result} = result
     assert run_result.stdout =~ "cross-node-svc"
   end
 
   test "list on peer shows services from local", %{peer: peer} do
     source = "main : '{IO, Exception} ()\nmain = do printLine \"listed\""
-    {:ok, _} = Uniops.Services.deploy("visible_svc", source)
+    {:ok, _} = Unex.Services.deploy("visible_svc", source)
 
     # Peer can't see it in its own local registry
     peer_local = :rpc.call(peer, Registry, :lookup, [Registry, "visible_svc"])

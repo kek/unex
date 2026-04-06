@@ -1,17 +1,17 @@
--- Uniops Main Combinator
--- Composes all ability handlers to run a program against a Uniops server.
+-- Unex Main Combinator
+-- Composes all ability handlers to run a program against a Unex server.
 --
 -- Usage:
 --   main : '{IO, Exception} ()
---   main = Uniops.main "http://localhost:4040" myApp
+--   main = Unex.main "http://localhost:4040" myApp
 --
--- Where myApp uses any combination of UStorage, UConfig, UBlobs, UScratch, ULog, URemote, UServices.
+-- Where myApp uses any combination of Unex.Storage, Unex.Config, Unex.Blobs, Unex.Scratch, Unex.Log, Unex.Remote, Unex.Services.
 
 
-Uniops.main : Text
-  -> '{UStorage, UConfig, UBlobs, UScratch, ULog, URemote, UServices, IO, Exception} a
+Unex.main : Text
+  -> '{Unex.Storage, Unex.Config, Unex.Blobs, Unex.Scratch, Unex.Log, Unex.Remote, Unex.Services, IO, Exception} a
   -> '{IO, Exception} a
-Uniops.main baseUrl program = do
+Unex.main baseUrl program = do
   Threads.run do Http.run do
     handle
       (handle
@@ -20,10 +20,10 @@ Uniops.main baseUrl program = do
             (handle
               (handle
                 (handle !program
-                  with UStorage.handler baseUrl)
-                with UConfig.handler baseUrl)
-              with UBlobs.handler baseUrl)
-            with UScratch.handler baseUrl)
-          with ULog.handler baseUrl)
-        with URemote.handler baseUrl)
-      with UServices.handler baseUrl
+                  with Unex.Storage.handler baseUrl)
+                with Unex.Config.handler baseUrl)
+              with Unex.Blobs.handler baseUrl)
+            with Unex.Scratch.handler baseUrl)
+          with Unex.Log.handler baseUrl)
+        with Unex.Remote.handler baseUrl)
+      with Unex.Services.handler baseUrl

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Complete the Uniops ability set with Config (encrypted secrets), Blobs (binary object storage), Scratch (ephemeral in-memory cache), and Log (structured logging) — all exposed via the HTTP API.
+**Goal:** Complete the Unex ability set with Config (encrypted secrets), Blobs (binary object storage), Scratch (ephemeral in-memory cache), and Log (structured logging) — all exposed via the HTTP API.
 
 **Architecture:** Each ability is a focused module with its own storage backend: Config uses Mnesia with AES-256-GCM encryption, Blobs uses the filesystem, Scratch uses a node-local ETS table, and Log uses an ETS ring buffer. Each gets an HTTP controller added to the existing router. All four are independent and can be implemented in parallel.
 
@@ -12,13 +12,13 @@
 
 ## Scope Note
 
-This is Plan 6 of 6 — the final plan. These four abilities are the remaining pieces from the Unison Cloud ability set. After this, Uniops provides open-source equivalents for: Storage, Remote, Services, Config, Blobs, Scratch, and Log.
+This is Plan 6 of 6 — the final plan. These four abilities are the remaining pieces from the Unison Cloud ability set. After this, Unex provides open-source equivalents for: Storage, Remote, Services, Config, Blobs, Scratch, and Log.
 
 ## File Structure
 
 ```
 lib/
-  uniops/
+  unex/
     abilities/
       config.ex                     # Encrypted key-value secrets (Mnesia + AES-256-GCM)
       blobs.ex                      # Binary object storage (filesystem)
@@ -32,7 +32,7 @@ lib/
       log_controller.ex             # HTTP handlers for /log
     application.ex                  # Modify: add Scratch + Log to supervision tree
 test/
-  uniops/
+  unex/
     abilities/
       config_test.exs
       blobs_test.exs
@@ -47,25 +47,25 @@ test/
 ### Task 1: Config (Encrypted Secrets)
 
 **Files:**
-- Create: `lib/uniops/abilities/config.ex`
-- Create: `test/uniops/abilities/config_test.exs`
+- Create: `lib/unex/abilities/config.ex`
+- Create: `test/unex/abilities/config_test.exs`
 
 Config stores secrets encrypted at rest in Mnesia. Uses AES-256-GCM with a key derived from a configurable secret. Scoped by environment name.
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `test/uniops/abilities/config_test.exs`:
+Create `test/unex/abilities/config_test.exs`:
 
 ```elixir
-defmodule Uniops.Abilities.ConfigTest do
+defmodule Unex.Abilities.ConfigTest do
   use ExUnit.Case, async: false
 
-  alias Uniops.Abilities.Config
+  alias Unex.Abilities.Config
 
   setup do
-    dir = Path.join(System.tmp_dir!(), "uniops_config_test_#{System.unique_integer([:positive])}")
+    dir = Path.join(System.tmp_dir!(), "unex_config_test_#{System.unique_integer([:positive])}")
     File.mkdir_p!(dir)
-    Uniops.Storage.Schema.init(dir)
+    Unex.Storage.Schema.init(dir)
     on_exit(fn ->
       :mnesia.stop()
       File.rm_rf!(dir)
@@ -132,20 +132,20 @@ end
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `mix test test/uniops/abilities/config_test.exs`
+Run: `mix test test/unex/abilities/config_test.exs`
 
 - [ ] **Step 3: Implement Config**
 
-Create `lib/uniops/abilities/config.ex`:
+Create `lib/unex/abilities/config.ex`:
 
 ```elixir
-defmodule Uniops.Abilities.Config do
+defmodule Unex.Abilities.Config do
   @moduledoc """
   Encrypted key-value store for secrets, scoped by environment.
   Values are encrypted with AES-256-GCM before storing in Mnesia.
   """
 
-  @table :uniops_config
+  @table :unex_config
 
   def table_name, do: @table
 
@@ -213,7 +213,7 @@ defmodule Uniops.Abilities.Config do
   end
 
   defp encryption_key do
-    configured = Application.get_env(:uniops, :config_encryption_key, "uniops-default-key-change-me!")
+    configured = Application.get_env(:unex, :config_encryption_key, "unex-default-key-change-me!")
     :crypto.hash(:sha256, configured)
   end
 
@@ -233,7 +233,7 @@ end
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `mix test test/uniops/abilities/config_test.exs`
+Run: `mix test test/unex/abilities/config_test.exs`
 Expected: 7 tests, 0 failures
 
 - [ ] **Step 5: Commit**
@@ -248,23 +248,23 @@ jj new
 ### Task 2: Blobs (Binary Object Storage)
 
 **Files:**
-- Create: `lib/uniops/abilities/blobs.ex`
-- Create: `test/uniops/abilities/blobs_test.exs`
+- Create: `lib/unex/abilities/blobs.ex`
+- Create: `test/unex/abilities/blobs_test.exs`
 
 Blobs stores binary data on the filesystem, keyed by database + blob key. Supports write, read, delete, and prefix listing.
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `test/uniops/abilities/blobs_test.exs`:
+Create `test/unex/abilities/blobs_test.exs`:
 
 ```elixir
-defmodule Uniops.Abilities.BlobsTest do
+defmodule Unex.Abilities.BlobsTest do
   use ExUnit.Case, async: false
 
-  alias Uniops.Abilities.Blobs
+  alias Unex.Abilities.Blobs
 
   setup do
-    dir = Path.join(System.tmp_dir!(), "uniops_blobs_test_#{System.unique_integer([:positive])}")
+    dir = Path.join(System.tmp_dir!(), "unex_blobs_test_#{System.unique_integer([:positive])}")
     on_exit(fn -> File.rm_rf!(dir) end)
     %{dir: dir}
   end
@@ -316,14 +316,14 @@ end
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `mix test test/uniops/abilities/blobs_test.exs`
+Run: `mix test test/unex/abilities/blobs_test.exs`
 
 - [ ] **Step 3: Implement Blobs**
 
-Create `lib/uniops/abilities/blobs.ex`:
+Create `lib/unex/abilities/blobs.ex`:
 
 ```elixir
-defmodule Uniops.Abilities.Blobs do
+defmodule Unex.Abilities.Blobs do
   @moduledoc """
   Binary object storage on the filesystem.
   Blobs are stored at `<base_dir>/<db>/<key>` with directory creation on write.
@@ -394,7 +394,7 @@ end
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `mix test test/uniops/abilities/blobs_test.exs`
+Run: `mix test test/unex/abilities/blobs_test.exs`
 Expected: 6 tests, 0 failures
 
 - [ ] **Step 5: Commit**
@@ -409,21 +409,21 @@ jj new
 ### Task 3: Scratch (Ephemeral In-Memory Cache)
 
 **Files:**
-- Create: `lib/uniops/abilities/scratch.ex`
-- Create: `test/uniops/abilities/scratch_test.exs`
-- Modify: `lib/uniops/application.ex`
+- Create: `lib/unex/abilities/scratch.ex`
+- Create: `test/unex/abilities/scratch_test.exs`
+- Modify: `lib/unex/application.ex`
 
 Scratch is a node-local, ephemeral ETS cache. Resets on restart. Same GenServer+ETS pattern as HashCache.
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `test/uniops/abilities/scratch_test.exs`:
+Create `test/unex/abilities/scratch_test.exs`:
 
 ```elixir
-defmodule Uniops.Abilities.ScratchTest do
+defmodule Unex.Abilities.ScratchTest do
   use ExUnit.Case, async: false
 
-  alias Uniops.Abilities.Scratch
+  alias Unex.Abilities.Scratch
 
   setup do
     cache = start_supervised!({Scratch, name: :test_scratch})
@@ -469,14 +469,14 @@ end
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `mix test test/uniops/abilities/scratch_test.exs`
+Run: `mix test test/unex/abilities/scratch_test.exs`
 
 - [ ] **Step 3: Implement Scratch**
 
-Create `lib/uniops/abilities/scratch.ex`:
+Create `lib/unex/abilities/scratch.ex`:
 
 ```elixir
-defmodule Uniops.Abilities.Scratch do
+defmodule Unex.Abilities.Scratch do
   @moduledoc """
   Ephemeral in-memory cache, node-local. Backed by ETS.
   Data is lost on node restart — use for temporary/session state only.
@@ -536,22 +536,22 @@ end
 
 - [ ] **Step 4: Add Scratch to supervision tree**
 
-In `lib/uniops/application.ex`, add `Uniops.Abilities.Scratch` to `cluster_children`:
+In `lib/unex/application.ex`, add `Unex.Abilities.Scratch` to `cluster_children`:
 
 ```elixir
   defp cluster_children do
     [
-      Uniops.Cluster.HashCache,
-      Uniops.Cluster.SyncServer,
-      Uniops.Services.Registry,
-      Uniops.Abilities.Scratch
+      Unex.Cluster.HashCache,
+      Unex.Cluster.SyncServer,
+      Unex.Services.Registry,
+      Unex.Abilities.Scratch
     ]
   end
 ```
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `mix test test/uniops/abilities/scratch_test.exs`
+Run: `mix test test/unex/abilities/scratch_test.exs`
 Expected: 5 tests, 0 failures
 
 - [ ] **Step 6: Commit**
@@ -566,21 +566,21 @@ jj new
 ### Task 4: Log (Structured Logging)
 
 **Files:**
-- Create: `lib/uniops/abilities/log.ex`
-- Create: `test/uniops/abilities/log_test.exs`
-- Modify: `lib/uniops/application.ex`
+- Create: `lib/unex/abilities/log.ex`
+- Create: `test/unex/abilities/log_test.exs`
+- Modify: `lib/unex/application.ex`
 
 Log stores structured entries in an ETS ring buffer (fixed max size, oldest evicted). Also writes to Elixir's Logger.
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `test/uniops/abilities/log_test.exs`:
+Create `test/unex/abilities/log_test.exs`:
 
 ```elixir
-defmodule Uniops.Abilities.LogTest do
+defmodule Unex.Abilities.LogTest do
   use ExUnit.Case, async: false
 
-  alias Uniops.Abilities.Log
+  alias Unex.Abilities.Log
 
   setup do
     log = start_supervised!({Log, name: :test_log, max_entries: 5})
@@ -638,14 +638,14 @@ end
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `mix test test/uniops/abilities/log_test.exs`
+Run: `mix test test/unex/abilities/log_test.exs`
 
 - [ ] **Step 3: Implement Log**
 
-Create `lib/uniops/abilities/log.ex`:
+Create `lib/unex/abilities/log.ex`:
 
 ```elixir
-defmodule Uniops.Abilities.Log do
+defmodule Unex.Abilities.Log do
   @moduledoc """
   Structured logging with an ETS ring buffer.
   Stores the most recent N entries, evicting oldest when full.
@@ -740,23 +740,23 @@ end
 
 - [ ] **Step 4: Add Log to supervision tree**
 
-In `lib/uniops/application.ex`, add `Uniops.Abilities.Log` to `cluster_children`:
+In `lib/unex/application.ex`, add `Unex.Abilities.Log` to `cluster_children`:
 
 ```elixir
   defp cluster_children do
     [
-      Uniops.Cluster.HashCache,
-      Uniops.Cluster.SyncServer,
-      Uniops.Services.Registry,
-      Uniops.Abilities.Scratch,
-      Uniops.Abilities.Log
+      Unex.Cluster.HashCache,
+      Unex.Cluster.SyncServer,
+      Unex.Services.Registry,
+      Unex.Abilities.Scratch,
+      Unex.Abilities.Log
     ]
   end
 ```
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `mix test test/uniops/abilities/log_test.exs`
+Run: `mix test test/unex/abilities/log_test.exs`
 Expected: 4 tests, 0 failures
 
 - [ ] **Step 6: Commit**
@@ -771,27 +771,27 @@ jj new
 ### Task 5: HTTP API for All Four Abilities
 
 **Files:**
-- Create: `lib/uniops/api/config_controller.ex`
-- Create: `lib/uniops/api/blobs_controller.ex`
-- Create: `lib/uniops/api/scratch_controller.ex`
-- Create: `lib/uniops/api/log_controller.ex`
-- Modify: `lib/uniops/api/router.ex`
-- Create: `test/uniops/api/abilities_api_test.exs`
+- Create: `lib/unex/api/config_controller.ex`
+- Create: `lib/unex/api/blobs_controller.ex`
+- Create: `lib/unex/api/scratch_controller.ex`
+- Create: `lib/unex/api/log_controller.ex`
+- Modify: `lib/unex/api/router.ex`
+- Create: `test/unex/api/abilities_api_test.exs`
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `test/uniops/api/abilities_api_test.exs`:
+Create `test/unex/api/abilities_api_test.exs`:
 
 ```elixir
-defmodule Uniops.API.AbilitiesAPITest do
+defmodule Unex.API.AbilitiesAPITest do
   use ExUnit.Case, async: false
   use Plug.Test
 
   setup_all do
-    dir = Path.join(System.tmp_dir!(), "uniops_abilities_api_#{System.unique_integer([:positive])}")
+    dir = Path.join(System.tmp_dir!(), "unex_abilities_api_#{System.unique_integer([:positive])}")
     File.mkdir_p!(dir)
-    Uniops.Storage.Schema.init(dir)
-    Application.put_env(:uniops, :blobs_dir, Path.join(dir, "blobs"))
+    Unex.Storage.Schema.init(dir)
+    Application.put_env(:unex, :blobs_dir, Path.join(dir, "blobs"))
     on_exit(fn ->
       :mnesia.stop()
       File.rm_rf!(dir)
@@ -802,7 +802,7 @@ defmodule Uniops.API.AbilitiesAPITest do
   defp call(conn) do
     conn
     |> put_req_header("content-type", "application/json")
-    |> Uniops.API.Router.call(Uniops.API.Router.init([]))
+    |> Unex.API.Router.call(Unex.API.Router.init([]))
   end
 
   # --- Config ---
@@ -901,17 +901,17 @@ end
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `mix test test/uniops/api/abilities_api_test.exs`
+Run: `mix test test/unex/api/abilities_api_test.exs`
 
 - [ ] **Step 3: Implement all four controllers**
 
-Create `lib/uniops/api/config_controller.ex`:
+Create `lib/unex/api/config_controller.ex`:
 
 ```elixir
-defmodule Uniops.API.ConfigController do
+defmodule Unex.API.ConfigController do
   @moduledoc false
-  alias Uniops.API.Json
-  alias Uniops.Abilities.Config
+  alias Unex.API.Json
+  alias Unex.Abilities.Config
 
   def set(conn, env, key) do
     {:ok, %{"value" => value}} = Json.read_json(conn)
@@ -933,16 +933,16 @@ defmodule Uniops.API.ConfigController do
 end
 ```
 
-Create `lib/uniops/api/blobs_controller.ex`:
+Create `lib/unex/api/blobs_controller.ex`:
 
 ```elixir
-defmodule Uniops.API.BlobsController do
+defmodule Unex.API.BlobsController do
   @moduledoc false
-  alias Uniops.API.Json
-  alias Uniops.Abilities.Blobs
+  alias Unex.API.Json
+  alias Unex.Abilities.Blobs
 
   defp blobs_dir do
-    Application.get_env(:uniops, :blobs_dir, Path.join(System.tmp_dir!(), "uniops_blobs"))
+    Application.get_env(:unex, :blobs_dir, Path.join(System.tmp_dir!(), "unex_blobs"))
   end
 
   def write(conn, db, key) do
@@ -967,13 +967,13 @@ defmodule Uniops.API.BlobsController do
 end
 ```
 
-Create `lib/uniops/api/scratch_controller.ex`:
+Create `lib/unex/api/scratch_controller.ex`:
 
 ```elixir
-defmodule Uniops.API.ScratchController do
+defmodule Unex.API.ScratchController do
   @moduledoc false
-  alias Uniops.API.Json
-  alias Uniops.Abilities.Scratch
+  alias Unex.API.Json
+  alias Unex.Abilities.Scratch
 
   def put(conn, key) do
     {:ok, %{"value" => value}} = Json.read_json(conn)
@@ -990,13 +990,13 @@ defmodule Uniops.API.ScratchController do
 end
 ```
 
-Create `lib/uniops/api/log_controller.ex`:
+Create `lib/unex/api/log_controller.ex`:
 
 ```elixir
-defmodule Uniops.API.LogController do
+defmodule Unex.API.LogController do
   @moduledoc false
-  alias Uniops.API.Json
-  alias Uniops.Abilities.Log
+  alias Unex.API.Json
+  alias Unex.Abilities.Log
 
   def append(conn) do
     {:ok, %{"level" => level, "message" => message} = body} = Json.read_json(conn)
@@ -1024,53 +1024,53 @@ end
 
 - [ ] **Step 4: Add routes to the router**
 
-Add these routes to `lib/uniops/api/router.ex` before the `match _` catch-all:
+Add these routes to `lib/unex/api/router.ex` before the `match _` catch-all:
 
 ```elixir
   # Config routes
   post "/config/:env/:key" do
-    Uniops.API.ConfigController.set(conn, env, key)
+    Unex.API.ConfigController.set(conn, env, key)
   end
 
   get "/config/:env/:key" do
-    Uniops.API.ConfigController.get(conn, env, key)
+    Unex.API.ConfigController.get(conn, env, key)
   end
 
   get "/config/:env" do
-    Uniops.API.ConfigController.list(conn, env)
+    Unex.API.ConfigController.list(conn, env)
   end
 
   # Blobs routes
   post "/blobs/:db/*key" do
     key_str = Enum.join(key, "/")
-    Uniops.API.BlobsController.write(conn, db, key_str)
+    Unex.API.BlobsController.write(conn, db, key_str)
   end
 
   get "/blobs/:db/*key" do
     key_str = Enum.join(key, "/")
-    Uniops.API.BlobsController.read(conn, db, key_str)
+    Unex.API.BlobsController.read(conn, db, key_str)
   end
 
   post "/blobs/:db/list" do
-    Uniops.API.BlobsController.list(conn, db)
+    Unex.API.BlobsController.list(conn, db)
   end
 
   # Scratch routes
   post "/scratch/:key" do
-    Uniops.API.ScratchController.put(conn, key)
+    Unex.API.ScratchController.put(conn, key)
   end
 
   get "/scratch/:key" do
-    Uniops.API.ScratchController.get(conn, key)
+    Unex.API.ScratchController.get(conn, key)
   end
 
   # Log routes
   post "/log" do
-    Uniops.API.LogController.append(conn)
+    Unex.API.LogController.append(conn)
   end
 
   get "/log/recent/:n" do
-    Uniops.API.LogController.recent(conn, n)
+    Unex.API.LogController.recent(conn, n)
   end
 ```
 
@@ -1078,7 +1078,7 @@ Add these routes to `lib/uniops/api/router.ex` before the `match _` catch-all:
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `mix test test/uniops/api/abilities_api_test.exs`
+Run: `mix test test/unex/api/abilities_api_test.exs`
 Expected: 8 tests, 0 failures
 
 - [ ] **Step 6: Commit**
@@ -1120,4 +1120,4 @@ jj desc -m "Complete Plan 6: Config, Blobs, Scratch, and Log abilities"
 4. **Log** — Structured logging with ETS ring buffer + Elixir Logger forwarding
 5. **HTTP API** — All four abilities accessible via REST endpoints
 
-This completes the full Uniops ability set. The project now provides open-source equivalents for every Unison Cloud ability: Storage, Remote, Services, Config, Blobs, Scratch, and Log.
+This completes the full Unex ability set. The project now provides open-source equivalents for every Unison Cloud ability: Storage, Remote, Services, Config, Blobs, Scratch, and Log.

@@ -1,0 +1,36 @@
+-- Unex Log Ability
+-- Structured logging with ring buffer.
+
+
+structural type Unex.LogEntry = { level : Text, message : Text, timestamp : Text, metadata : Text }
+
+unique ability Unex.Log where
+  info : Text -> ()
+  error : Text -> ()
+  warn : Text -> ()
+  recent : Nat -> [Unex.LogEntry]
+
+Unex.Log.handler : Text -> Request {Unex.Log} a -> {IO, Exception, Http, Threads} a
+Unex.Log.handler baseUrl = cases
+  { Unex.Log.info message -> k } ->
+    _ = Unex.Http.postJson (baseUrl ++ "/log")
+          ("{\"level\":\"info\",\"message\":\"" ++ message ++ "\",\"metadata\":{}}")
+    handle k () with Unex.Log.handler baseUrl
+
+  { Unex.Log.error message -> k } ->
+    _ = Unex.Http.postJson (baseUrl ++ "/log")
+          ("{\"level\":\"error\",\"message\":\"" ++ message ++ "\",\"metadata\":{}}")
+    handle k () with Unex.Log.handler baseUrl
+
+  { Unex.Log.warn message -> k } ->
+    _ = Unex.Http.postJson (baseUrl ++ "/log")
+          ("{\"level\":\"warn\",\"message\":\"" ++ message ++ "\",\"metadata\":{}}")
+    handle k () with Unex.Log.handler baseUrl
+
+  { Unex.Log.recent n -> k } ->
+    body = Unex.Http.getJson (baseUrl ++ "/log/recent/" ++ Nat.toText n)
+    -- Return empty list — full JSON array parsing is complex
+    -- Users can parse the raw body if needed via getJson directly
+    handle k [] with Unex.Log.handler baseUrl
+
+  { a } -> a

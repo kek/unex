@@ -2,7 +2,7 @@
 
 ## Overview
 
-Two independent improvements to Uniops:
+Two independent improvements to Unex:
 
 1. **Cluster Ergonomics (Plan 7)** — zero-config single-node startup, env-var-driven cluster configuration, auto-peer-connect, Mix release for production
 2. **Unison Ability Library (Plan 8)** — proper Unison ability definitions with HTTP-backed handlers for all seven abilities, so Unison programs use idiomatic `handle ... with` patterns instead of raw HTTP calls
@@ -13,27 +13,27 @@ Two independent improvements to Uniops:
 
 ### Goal
 
-Replace the current manual multi-terminal, iex-flag, Node.connect workflow with: `mix uniops.start` for dev, `./bin/uniops start` for production. Single-node works with zero config. Clustering requires only setting a few env vars.
+Replace the current manual multi-terminal, iex-flag, Node.connect workflow with: `mix unex.start` for dev, `./bin/unex start` for production. Single-node works with zero config. Clustering requires only setting a few env vars.
 
 ### Config Resolution
 
 Lookup order (first wins):
 
 1. **Environment variables** — always override everything
-2. **Config file** — pointed to by `UNIOPS_CONFIG` env var, or found at `~/.config/uniops/config.exs` / `/etc/uniops/config.exs`
+2. **Config file** — pointed to by `UNEX_CONFIG` env var, or found at `~/.config/unex/config.exs` / `/etc/unex/config.exs`
 3. **Built-in defaults** — single-node, port 4040, data in `./data/`
 
 ### Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `UNIOPS_NODE` | *(none — no distribution)* | Node name. Short name (e.g., `a`) uses `--sname`, FQDN (e.g., `a@10.0.1.5`) uses `--name` |
-| `UNIOPS_COOKIE` | *(none)* | Cluster auth cookie. Required if `UNIOPS_NODE` is set |
-| `UNIOPS_PORT` | `4040` | HTTP API port |
-| `UNIOPS_DATA` | `./data` | Base directory for Mnesia and blobs |
-| `UNIOPS_PEERS` | *(none)* | Comma-separated list of peer nodes to auto-connect (e.g., `b@10.0.1.2,c@10.0.1.3`) |
-| `UNIOPS_CONFIG_KEY` | *(none — generated at startup)* | AES-256-GCM encryption key for Config secrets |
-| `UNIOPS_CONFIG` | *(none)* | Path to config file |
+| `UNEX_NODE` | *(none — no distribution)* | Node name. Short name (e.g., `a`) uses `--sname`, FQDN (e.g., `a@10.0.1.5`) uses `--name` |
+| `UNEX_COOKIE` | *(none)* | Cluster auth cookie. Required if `UNEX_NODE` is set |
+| `UNEX_PORT` | `4040` | HTTP API port |
+| `UNEX_DATA` | `./data` | Base directory for Mnesia and blobs |
+| `UNEX_PEERS` | *(none)* | Comma-separated list of peer nodes to auto-connect (e.g., `b@10.0.1.2,c@10.0.1.3`) |
+| `UNEX_CONFIG_KEY` | *(none — generated at startup)* | AES-256-GCM encryption key for Config secrets |
+| `UNEX_CONFIG` | *(none)* | Path to config file |
 | `UCM_PATH` | `ucm` | Path to UCM binary |
 
 ### Config File Format
@@ -41,14 +41,14 @@ Lookup order (first wins):
 Optional. For operators managing multiple nodes who prefer a file over env vars:
 
 ```elixir
-# /etc/uniops/node-a.exs
+# /etc/unex/node-a.exs
 import Config
 
-config :uniops,
+config :unex,
   node_name: "a",
-  cookie: "uniops_secret",
+  cookie: "unex_secret",
   api_port: 4040,
-  data_dir: "/var/data/uniops",
+  data_dir: "/var/data/unex",
   peers: ["b@10.0.1.2", "c@10.0.1.3"],
   config_encryption_key: "base64-encoded-key-here"
 ```
@@ -57,54 +57,54 @@ Env vars always override values from the config file.
 
 ### Encryption Key Behavior
 
-- If `UNIOPS_CONFIG_KEY` is not set and no config file provides one: generate a random 32-byte key, base64-encode it, and print to stdout:
+- If `UNEX_CONFIG_KEY` is not set and no config file provides one: generate a random 32-byte key, base64-encode it, and print to stdout:
   ```
-  [uniops] No encryption key configured. Generated: <base64>
-  [uniops] Set UNIOPS_CONFIG_KEY to persist this key across restarts.
-  [uniops] WARNING: If the key changes, existing encrypted Config values become unreadable.
+  [unex] No encryption key configured. Generated: <base64>
+  [unex] Set UNEX_CONFIG_KEY to persist this key across restarts.
+  [unex] WARNING: If the key changes, existing encrypted Config values become unreadable.
   ```
 - No default key is ever committed to the codebase.
 
 ### PeerConnector GenServer
 
 A new supervised process that:
-1. Parses `UNIOPS_PEERS` into a list of node atoms
+1. Parses `UNEX_PEERS` into a list of node atoms
 2. Attempts `Node.connect/1` to each peer
 3. On failure, retries with exponential backoff (1s, 2s, 4s, ... capped at 30s)
 4. Logs connection success/failure
 5. Periodically re-checks (every 30s) to handle peers that come up later
-6. Only starts if `UNIOPS_NODE` is set (distribution enabled)
+6. Only starts if `UNEX_NODE` is set (distribution enabled)
 
 ### Validation
 
-- If `UNIOPS_NODE` is set but `UNIOPS_COOKIE` is not: startup fails with a clear error message: `"UNIOPS_COOKIE is required when UNIOPS_NODE is set"`
-- If `UNIOPS_PEERS` is set but `UNIOPS_NODE` is not: startup fails: `"UNIOPS_NODE is required when UNIOPS_PEERS is set"`
+- If `UNEX_NODE` is set but `UNEX_COOKIE` is not: startup fails with a clear error message: `"UNEX_COOKIE is required when UNEX_NODE is set"`
+- If `UNEX_PEERS` is set but `UNEX_NODE` is not: startup fails: `"UNEX_NODE is required when UNEX_PEERS is set"`
 
-### Mix Task: `mix uniops.start`
+### Mix Task: `mix unex.start`
 
 A Mix task that:
 1. Reads config (env vars > config file > defaults)
 2. Validates config (see above)
-3. If `UNIOPS_NODE` is set, re-execs the command with distribution flags — since VM flags can't be changed after the BEAM starts, the task calls `System.cmd("elixir", ["--sname", name, "--cookie", cookie, "-S", "mix", "run", "--no-halt"])` or equivalent
+3. If `UNEX_NODE` is set, re-execs the command with distribution flags — since VM flags can't be changed after the BEAM starts, the task calls `System.cmd("elixir", ["--sname", name, "--cookie", cookie, "-S", "mix", "run", "--no-halt"])` or equivalent
 4. Starts the application with API enabled
 5. Drops into IEx
 
 ```bash
 # Zero config — single node, port 4040
-mix uniops.start
+mix unex.start
 
 # Cluster node
-UNIOPS_NODE=a UNIOPS_COOKIE=secret UNIOPS_PEERS=b@host mix uniops.start
+UNEX_NODE=a UNEX_COOKIE=secret UNEX_PEERS=b@host mix unex.start
 
 # Custom config file
-mix uniops.start --config /path/to/config.exs
+mix unex.start --config /path/to/config.exs
 ```
 
 ### Mix Release
 
-`MIX_ENV=prod mix release` produces a standalone `uniops` binary.
+`MIX_ENV=prod mix release` produces a standalone `unex` binary.
 
-- `rel/env.sh.eex` translates `UNIOPS_NODE` and `UNIOPS_COOKIE` into `--sname`/`--name` and `--cookie` VM flags
+- `rel/env.sh.eex` translates `UNEX_NODE` and `UNEX_COOKIE` into `--sname`/`--name` and `--cookie` VM flags
 - `config/runtime.exs` handles all other config resolution
 - Same env vars work for both dev and production
 
@@ -113,13 +113,13 @@ mix uniops.start --config /path/to/config.exs
 MIX_ENV=prod mix release
 
 # Single node
-./bin/uniops start
+./bin/unex start
 
 # Cluster node
-UNIOPS_NODE=a UNIOPS_COOKIE=secret UNIOPS_PEERS=b@host ./bin/uniops start
+UNEX_NODE=a UNEX_COOKIE=secret UNEX_PEERS=b@host ./bin/unex start
 
 # Attach to running node
-./bin/uniops remote
+./bin/unex remote
 ```
 
 ### Defaults (Zero Config)
@@ -139,7 +139,7 @@ config/
 rel/
   env.sh.eex                    -- VM flag injection for release
   vm.args.eex                   -- BEAM VM args template
-lib/uniops/
+lib/unex/
   cluster/peer_connector.ex     -- auto-connect GenServer
   config_resolver.ex            -- env var > file > default resolution logic
   application.ex                -- modify: add PeerConnector, always start API
@@ -150,7 +150,7 @@ config.example.exs              -- reference config file (not loaded by default)
 ### What Changes from Current Behavior
 
 - `start_api` config flag removed — API always starts (controlled by whether the app is running)
-- `mnesia_dir` and `blobs_dir` derived from `UNIOPS_DATA` by default (can still be set individually)
+- `mnesia_dir` and `blobs_dir` derived from `UNEX_DATA` by default (can still be set individually)
 - Application startup auto-connects to peers instead of manual `Node.connect`
 - `config/test.exs` still disables API and distribution for tests
 
@@ -160,26 +160,26 @@ config.example.exs              -- reference config file (not loaded by default)
 
 ### Goal
 
-Provide a Unison library where programs are written against abstract abilities (`UStorage`, `UConfig`, etc.) and the Uniops handler translates operations to HTTP calls. Programs look like:
+Provide a Unison library where programs are written against abstract abilities (`Unex.Storage`, `Unex.Config`, etc.) and the Unex handler translates operations to HTTP calls. Programs look like:
 
 ```unison
-myApp : '{UStorage, UConfig, IO, Exception} ()
+myApp : '{Unex.Storage, Unex.Config, IO, Exception} ()
 myApp = do
-  UConfig.set "prod" "api_key" "sk-secret"
-  UStorage.write "mydb" "users" "alice" "{\"role\":\"admin\"}"
-  val = UStorage.read "mydb" "users" "alice"
+  Unex.Config.set "prod" "api_key" "sk-secret"
+  Unex.Storage.write "mydb" "users" "alice" "{\"role\":\"admin\"}"
+  val = Unex.Storage.read "mydb" "users" "alice"
   printLine (Optional.getOrElse "not found" val)
 
 main : '{IO, Exception} ()
-main = Uniops.main "http://localhost:4040" myApp
+main = Unex.main "http://localhost:4040" myApp
 ```
 
 ### Ability Definitions
 
-#### UStorage
+#### Unex.Storage
 
 ```unison
-unique ability UStorage where
+unique ability Unex.Storage where
   createDatabase : Text -> ()
   listDatabases : [Text]
   createTable : Text -> Text -> ()
@@ -196,39 +196,39 @@ structural type TxOp
   | WriteCell Text Text          -- name, value
 ```
 
-#### UConfig
+#### Unex.Config
 
 ```unison
-unique ability UConfig where
+unique ability Unex.Config where
   set : Text -> Text -> Text -> ()
   get : Text -> Text -> Optional Text
   delete : Text -> Text -> ()
   list : Text -> [Text]
 ```
 
-#### UBlobs
+#### Unex.Blobs
 
 ```unison
-unique ability UBlobs where
+unique ability Unex.Blobs where
   write : Text -> Text -> Bytes -> ()
   read : Text -> Text -> Optional Bytes
   delete : Text -> Text -> ()
   list : Text -> Text -> [Text]
 ```
 
-#### UScratch
+#### Unex.Scratch
 
 ```unison
-unique ability UScratch where
+unique ability Unex.Scratch where
   put : Text -> Text -> ()
   get : Text -> Optional Text
   delete : Text -> ()
 ```
 
-#### ULog
+#### Unex.Log
 
 ```unison
-unique ability ULog where
+unique ability Unex.Log where
   info : Text -> ()
   error : Text -> ()
   warn : Text -> ()
@@ -237,18 +237,18 @@ unique ability ULog where
 structural type LogEntry = { level : Text, message : Text, timestamp : Text, metadata : Text }
 ```
 
-#### URemote
+#### Unex.Remote
 
 ```unison
-unique ability URemote where
+unique ability Unex.Remote where
   execute : Text -> Text
   submit : Text -> Text
 ```
 
-#### UServices
+#### Unex.Services
 
 ```unison
-unique ability UServices where
+unique ability Unex.Services where
   deploy : Text -> Text -> Text
   call : Text -> Text
   list : [ServiceInfo]
@@ -262,27 +262,27 @@ structural type ServiceInfo = { name : Text, hash : Text, node : Text }
 Each ability gets a handler function that pattern-matches on the ability's operations and makes HTTP calls:
 
 ```unison
-UStorage.handler : Text -> Request {UStorage} a -> {Http, Threads, IO, Exception} a
-UStorage.handler baseUrl = cases
-  { UStorage.write db table key value -> k } ->
+Unex.Storage.handler : Text -> Request {Unex.Storage} a -> {Http, Threads, IO, Exception} a
+Unex.Storage.handler baseUrl = cases
+  { Unex.Storage.write db table key value -> k } ->
     _ = postJson (baseUrl ++ "/databases/" ++ db ++ "/tables/" ++ table ++ "/write")
           (toJson [("key", key), ("value", value)])
-    handle k () with UStorage.handler baseUrl
-  { UStorage.read db table key -> k } ->
+    handle k () with Unex.Storage.handler baseUrl
+  { Unex.Storage.read db table key -> k } ->
     resp = getJson (baseUrl ++ "/databases/" ++ db ++ "/tables/" ++ table ++ "/read/" ++ key)
     val = parseOptionalValue resp
-    handle k val with UStorage.handler baseUrl
+    handle k val with Unex.Storage.handler baseUrl
   -- ... remaining operations ...
   { a } -> a
 ```
 
 ### Top-Level Combinator
 
-`Uniops.main` composes all handlers:
+`Unex.main` composes all handlers:
 
 ```unison
-Uniops.main : Text -> '{UStorage, UConfig, UBlobs, UScratch, ULog, URemote, UServices, IO, Exception} a -> '{IO, Exception} a
-Uniops.main baseUrl program = do
+Unex.main : Text -> '{Unex.Storage, Unex.Config, Unex.Blobs, Unex.Scratch, Unex.Log, Unex.Remote, Unex.Services, IO, Exception} a -> '{IO, Exception} a
+Unex.main baseUrl program = do
   Threads.run do Http.run do
     handle
       (handle
@@ -291,13 +291,13 @@ Uniops.main baseUrl program = do
             (handle
               (handle
                 (handle !program
-                  with UStorage.handler baseUrl)
-                with UConfig.handler baseUrl)
-              with UBlobs.handler baseUrl)
-            with UScratch.handler baseUrl)
-          with ULog.handler baseUrl)
-        with URemote.handler baseUrl)
-      with UServices.handler baseUrl
+                  with Unex.Storage.handler baseUrl)
+                with Unex.Config.handler baseUrl)
+              with Unex.Blobs.handler baseUrl)
+            with Unex.Scratch.handler baseUrl)
+          with Unex.Log.handler baseUrl)
+        with Unex.Remote.handler baseUrl)
+      with Unex.Services.handler baseUrl
 ```
 
 Users who only need a subset can compose handlers individually:
@@ -305,7 +305,7 @@ Users who only need a subset can compose handlers individually:
 ```unison
 myMain = do
   Threads.run do Http.run do
-    handle !myApp with UStorage.handler "http://localhost:4040"
+    handle !myApp with Unex.Storage.handler "http://localhost:4040"
 ```
 
 ### Shared HTTP Helpers
@@ -313,27 +313,27 @@ myMain = do
 A helpers module provides JSON construction and HTTP plumbing used by all handlers:
 
 ```unison
-Uniops.Http.postJson : Text -> Text -> {Http, Threads, IO, Exception} HttpResponse
-Uniops.Http.getJson : Text -> {Http, Threads, IO, Exception} Text
-Uniops.Http.deleteReq : Text -> {Http, Threads, IO, Exception} HttpResponse
-Uniops.Http.toJson : [(Text, Text)] -> Text
-Uniops.Http.parseOptionalValue : Text -> Optional Text
+Unex.Http.postJson : Text -> Text -> {Http, Threads, IO, Exception} HttpResponse
+Unex.Http.getJson : Text -> {Http, Threads, IO, Exception} Text
+Unex.Http.deleteReq : Text -> {Http, Threads, IO, Exception} HttpResponse
+Unex.Http.toJson : [(Text, Text)] -> Text
+Unex.Http.parseOptionalValue : Text -> Optional Text
 ```
 
 ### File Structure
 
 ```
 unison/
-  Uniops/
-    Storage.u           -- UStorage ability + handler
-    Config.u            -- UConfig ability + handler
-    Blobs.u             -- UBlobs ability + handler
-    Scratch.u           -- UScratch ability + handler
-    Log.u               -- ULog ability + handler
-    Remote.u            -- URemote ability + handler
-    Services.u          -- UServices ability + handler
+  Unex/
+    Storage.u           -- Unex.Storage ability + handler
+    Config.u            -- Unex.Config ability + handler
+    Blobs.u             -- Unex.Blobs ability + handler
+    Scratch.u           -- Unex.Scratch ability + handler
+    Log.u               -- Unex.Log ability + handler
+    Remote.u            -- Unex.Remote ability + handler
+    Services.u          -- Unex.Services ability + handler
     Http/Helpers.u      -- shared HTTP + JSON utilities
-  Main.u                -- Uniops.main combinator
+  Main.u                -- Unex.main combinator
   Examples/
     BasicStorage.u      -- example: write/read/scan
     ConfigAndSecrets.u  -- example: config management
@@ -343,7 +343,7 @@ unison/
 ### Testing Strategy
 
 Each handler is testable by:
-1. Starting a Uniops server (`mix uniops.start`)
+1. Starting a Unex server (`mix unex.start`)
 2. Running the Unison program via UCM (`run main`)
 3. Verifying output
 
@@ -352,16 +352,16 @@ Example programs in `unison/Examples/` serve as both documentation and integrati
 For unit testing within Unison, users can write mock handlers:
 
 ```unison
-mockStorage : Request {UStorage} a -> a
+mockStorage : Request {Unex.Storage} a -> a
 mockStorage = cases
-  { UStorage.read _ _ _ -> k } -> handle k (Some "mock-value") with mockStorage
-  { UStorage.write _ _ _ _ -> k } -> handle k () with mockStorage
+  { Unex.Storage.read _ _ _ -> k } -> handle k (Some "mock-value") with mockStorage
+  { Unex.Storage.write _ _ _ _ -> k } -> handle k () with mockStorage
   { a } -> a
 ```
 
 ### What This Doesn't Cover
 
-- **Automatic UCM project setup** — users manually create their Unison project and copy/install the library. A future `mix uniops.init.unison` task could automate this.
+- **Automatic UCM project setup** — users manually create their Unison project and copy/install the library. A future `mix unex.init.unison` task could automate this.
 - **Binary serialization** — values are JSON text over HTTP, not Unison's native serialization format. This is a pragmatic choice; native serialization would require understanding UCM's wire format.
 - **Streaming** — no Volturno/Seq equivalent. Operations are request-response.
 
@@ -372,4 +372,4 @@ mockStorage = cases
 1. **Plan 7: Cluster Ergonomics** — improves operator experience for everything
 2. **Plan 8: Unison Ability Library** — builds on the easy-to-start cluster
 
-They share no code. Plan 8 only needs Plan 7 to be done so the README examples say `mix uniops.start` instead of the old manual process.
+They share no code. Plan 8 only needs Plan 7 to be done so the README examples say `mix unex.start` instead of the old manual process.

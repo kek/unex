@@ -1,4 +1,4 @@
-defmodule Uniops.Integration.UnisonStorageTest do
+defmodule Unex.Integration.UnisonStorageTest do
   @moduledoc """
   End-to-end test: a Unison program makes HTTP calls to our storage API,
   writes data, reads it back, and prints the result. We verify via stdout.
@@ -12,14 +12,14 @@ defmodule Uniops.Integration.UnisonStorageTest do
     mnesia_dir =
       Path.join(
         System.tmp_dir!(),
-        "uniops_unison_storage_test_#{:erlang.unique_integer([:positive])}"
+        "unex_unison_storage_test_#{:erlang.unique_integer([:positive])}"
       )
 
     File.mkdir_p!(mnesia_dir)
-    Uniops.Storage.Schema.init(mnesia_dir)
+    Unex.Storage.Schema.init(mnesia_dir)
 
     # 2. Start Bandit on a test port
-    {:ok, bandit_pid} = Bandit.start_link(plug: Uniops.API.Router, port: @test_port)
+    {:ok, bandit_pid} = Bandit.start_link(plug: Unex.API.Router, port: @test_port)
 
     on_exit(fn ->
       Process.exit(bandit_pid, :normal)
@@ -43,8 +43,8 @@ defmodule Uniops.Integration.UnisonStorageTest do
         printLine (bodyText resp)
     """
 
-    assert {:ok, result} = Uniops.eval(source, timeout: 120_000)
-    stdout = Uniops.UCM.Output.strip_ansi(result.stdout)
+    assert {:ok, result} = Unex.eval(source, timeout: 120_000)
+    stdout = Unex.UCM.Output.strip_ansi(result.stdout)
     assert stdout =~ "ok"
   end
 
@@ -89,8 +89,8 @@ defmodule Uniops.Integration.UnisonStorageTest do
         printLine body
     """
 
-    assert {:ok, result} = Uniops.eval(source, timeout: 120_000)
-    stdout = Uniops.UCM.Output.strip_ansi(result.stdout)
+    assert {:ok, result} = Unex.eval(source, timeout: 120_000)
+    stdout = Unex.UCM.Output.strip_ansi(result.stdout)
 
     # The response body should contain the value we wrote
     assert stdout =~ "world"

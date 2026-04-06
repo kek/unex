@@ -1,15 +1,15 @@
-defmodule Uniops.Integration.RemoteExecuteTest do
+defmodule Unex.Integration.RemoteExecuteTest do
   use ExUnit.Case, async: false
 
-  alias Uniops.Cluster.HashCache
-  alias Uniops.Cluster.SyncServer
-  alias Uniops.Remote
+  alias Unex.Cluster.HashCache
+  alias Unex.Cluster.SyncServer
+  alias Unex.Remote
 
   @moduletag timeout: 300_000
 
   setup_all do
     unless Node.alive?() do
-      {:ok, _} = :net_kernel.start([:uniops_remote_test, :shortnames])
+      {:ok, _} = :net_kernel.start([:unex_remote_test, :shortnames])
     end
 
     :ok
@@ -36,10 +36,10 @@ defmodule Uniops.Integration.RemoteExecuteTest do
 
   defp compile_and_cache(message) do
     source = "main : '{IO, Exception} ()\nmain = do printLine \"#{message}\""
-    dir = Path.join(System.tmp_dir!(), "uniops_remote_exec_#{System.unique_integer([:positive])}")
-    {:ok, workspace} = Uniops.Workspace.create(dir)
-    {:ok, file_path} = Uniops.Workspace.write_source(workspace, "program.u", source)
-    {:ok, uc_path} = Uniops.Compiler.compile(workspace, file_path, "main", "program")
+    dir = Path.join(System.tmp_dir!(), "unex_remote_exec_#{System.unique_integer([:positive])}")
+    {:ok, workspace} = Unex.Workspace.create(dir)
+    {:ok, file_path} = Unex.Workspace.write_source(workspace, "program.u", source)
+    {:ok, uc_path} = Unex.Compiler.compile(workspace, file_path, "main", "program")
     uc_bytes = File.read!(uc_path)
     hash = HashCache.put(uc_bytes)
     {hash, workspace}
@@ -52,7 +52,7 @@ defmodule Uniops.Integration.RemoteExecuteTest do
       assert {:ok, result} = Remote.execute(hash, node: peer, timeout: 120_000)
       assert result.stdout =~ "executed-on-peer"
     after
-      Uniops.Workspace.destroy(workspace)
+      Unex.Workspace.destroy(workspace)
     end
   end
 
@@ -64,7 +64,7 @@ defmodule Uniops.Integration.RemoteExecuteTest do
       assert {:ok, result} = Remote.submit(hash, timeout: 120_000)
       assert result.stdout =~ "submitted-ok"
     after
-      Uniops.Workspace.destroy(workspace)
+      Unex.Workspace.destroy(workspace)
     end
   end
 

@@ -1,10 +1,10 @@
 import Config
 
 # Compile-time defaults. Runtime config in config/runtime.exs overrides these.
-config :uniops,
+config :unex,
   ucm_path: "ucm",
   ucm_timeout: 30_000,
-  workspace_base: Path.join(System.tmp_dir!(), "uniops"),
+  workspace_base: Path.join(System.tmp_dir!(), "unex"),
   api_port: 4040,
   start_api: false
 

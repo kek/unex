@@ -1,0 +1,80 @@
+-- Unex Storage Ability
+-- Durable key-value storage with ordered tables, cells, and transactions.
+
+
+structural type Unex.TxOp
+  = WriteTable Text Text Text
+  | WriteCell Text Text
+
+unique ability Unex.Storage where
+  createDatabase : Text -> ()
+  listDatabases : [Text]
+  createTable : Text -> Text -> ()
+  write : Text -> Text -> Text -> Text -> ()
+  read : Text -> Text -> Text -> Optional Text
+  delete : Text -> Text -> Text -> ()
+  scan : Text -> Text -> Text -> Text -> [(Text, Text)]
+  writeCell : Text -> Text -> Text -> ()
+  readCell : Text -> Text -> Optional Text
+  tx : Text -> [Unex.TxOp] -> ()
+
+Unex.Storage.handler : Text -> Request {Unex.Storage} a -> {IO, Exception, Http, Threads} a
+Unex.Storage.handler baseUrl = cases
+  { Unex.Storage.createDatabase name -> k } ->
+    _ = Unex.Http.postJson (baseUrl ++ "/databases") (Unex.Http.toJson [("name", name)])
+    handle k () with Unex.Storage.handler baseUrl
+
+  { Unex.Storage.listDatabases -> k } ->
+    body = Unex.Http.getJson (baseUrl ++ "/databases")
+    keys = Unex.Http.parseKeys body
+    handle k keys with Unex.Storage.handler baseUrl
+
+  { Unex.Storage.createTable db table -> k } ->
+    _ = Unex.Http.postEmpty (baseUrl ++ "/databases/" ++ db ++ "/tables/" ++ table)
+    handle k () with Unex.Storage.handler baseUrl
+
+  { Unex.Storage.write db table key value -> k } ->
+    _ = Unex.Http.postJson
+          (baseUrl ++ "/databases/" ++ db ++ "/tables/" ++ table ++ "/write")
+          (Unex.Http.toJson [("key", key), ("value", value)])
+    handle k () with Unex.Storage.handler baseUrl
+
+  { Unex.Storage.read db table key -> k } ->
+    resp = Http.get (URI.parse (baseUrl ++ "/databases/" ++ db ++ "/tables/" ++ table ++ "/read/" ++ key))
+    val = Unex.Http.parseValue resp
+    handle k val with Unex.Storage.handler baseUrl
+
+  { Unex.Storage.delete db table key -> k } ->
+    _ = Unex.Http.deleteReq (baseUrl ++ "/databases/" ++ db ++ "/tables/" ++ table ++ "/delete/" ++ key)
+    handle k () with Unex.Storage.handler baseUrl
+
+  { Unex.Storage.scan db table from to -> k } ->
+    body = bodyText (Http.request (HttpRequest.addHeader "Content-Type" "application/json"
+      (HttpRequest.post (URI.parse (baseUrl ++ "/databases/" ++ db ++ "/tables/" ++ table ++ "/scan"))
+        (Body.fromText (Unex.Http.toJson [("from", from), ("to", to)])))))
+    -- Parse scan response: {"results":[{"key":"k","value":"v"},...]}
+    -- Simple: return empty for now, scan returns raw pairs
+    handle k [] with Unex.Storage.handler baseUrl
+
+  { Unex.Storage.writeCell db name value -> k } ->
+    _ = Unex.Http.postJson
+          (baseUrl ++ "/databases/" ++ db ++ "/cells/" ++ name ++ "/write")
+          (Unex.Http.toJson [("value", value)])
+    handle k () with Unex.Storage.handler baseUrl
+
+  { Unex.Storage.readCell db name -> k } ->
+    resp = Http.get (URI.parse (baseUrl ++ "/databases/" ++ db ++ "/cells/" ++ name ++ "/read"))
+    val = Unex.Http.parseValue resp
+    handle k val with Unex.Storage.handler baseUrl
+
+  { Unex.Storage.tx db ops -> k } ->
+    opsJson = List.map (cases
+      Unex.TxOp.WriteTable table key value ->
+        "{\"op\":\"write_table\",\"table\":\"" ++ table ++ "\",\"key\":\"" ++ key ++ "\",\"value\":\"" ++ value ++ "\"}"
+      Unex.TxOp.WriteCell name value ->
+        "{\"op\":\"write_cell\",\"name\":\"" ++ name ++ "\",\"value\":\"" ++ value ++ "\"}") ops
+    body = "{\"operations\":[" ++ Text.join "," opsJson ++ "]}"
+    _ = Unex.Http.postJson (baseUrl ++ "/databases/" ++ db ++ "/tx") body
+    handle k () with Unex.Storage.handler baseUrl
+
+  { a } -> a
