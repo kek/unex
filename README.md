@@ -1,4 +1,4 @@
-# unex - the unix hater's revenge
+# the unix hater's revenge
 
 An open-source ops platform for [Unison](https://www.unison-lang.org/) programs. Durable storage, encrypted secrets, clustering, and content-addressed code execution — all on the BEAM.
 
