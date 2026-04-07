@@ -1,6 +1,6 @@
 # Introduction to Unison
 
-> **Note:** This document was AI-generated from various online Unison resources. References are listed at the bottom but may not be exhaustive. If you have any corrections or reservations, please get in touch.
+> **Note:** This document was AI-generated from various online Unison resources and was mostly intended to support a code generation agent. For human use, we refer to official Unison documentation. References are listed at the bottom but may not be exhaustive. If you have any corrections or reservations, please get in touch.
 
 ## Part I — The Big Idea: Content-Addressed Code
 
