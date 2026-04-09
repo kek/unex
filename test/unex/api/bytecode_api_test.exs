@@ -78,4 +78,26 @@ defmodule Unex.API.BytecodeApiTest do
     assert conn.status == 200
     assert conn.resp_body == bytes
   end
+
+  test "POST /bytecode/:hash with invalid hex returns 400" do
+    conn = call(:post, "/bytecode/testhash", Jason.encode!(%{data: "not-valid-hex!!!"}))
+    assert conn.status == 400
+  end
+
+  test "POST /bytecode/:hash with missing data field returns 400" do
+    conn = call(:post, "/bytecode/testhash", Jason.encode!(%{wrong: "field"}))
+    assert conn.status == 400
+  end
+
+  test "POST /bytecode/:hash with # prefix normalizes hash in response" do
+    bytes = "normalize_test_bytes"
+    hex = Base.encode16(bytes)
+
+    # %23 is URL-encoded '#'; Plug decodes it to '#' before routing,
+    # and normalize_hash/1 strips the leading '#' before storage.
+    conn = call(:post, "/bytecode/%23abc999", Jason.encode!(%{data: hex}))
+    assert conn.status == 201
+    body = Jason.decode!(conn.resp_body)
+    assert body["hash"] == "abc999"
+  end
 end

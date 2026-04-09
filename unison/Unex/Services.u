@@ -26,7 +26,7 @@ Unex.Services.handler baseUrl secret = cases
         Exception.raise (Failure.Failure (typeLink Text) msg (Any ()))
       Some code ->
         bytes = Code.serialize_v3 code
-        _ = Unex.Http.putBytes secret (baseUrl ++ "/bytecode/" ++ hash) bytes
+        _ = Unex.Http.postBytesJson secret (baseUrl ++ "/bytecode/" ++ hash) bytes
         handle k hash with Unex.Services.handler baseUrl secret
 
   { Unex.Services.release name hash -> k } ->
