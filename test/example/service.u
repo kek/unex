@@ -1,13 +1,13 @@
--- Example: Deploy a service using Code.lookup-based bytecode push.
+-- Step 1 of 2: Define and add the service terms.
 --
--- myService is the application logic using Unex abilities.
--- mainService wraps it with Unex.main so connection details come from env vars.
--- The server receives fully compiled bytecode and runs it with ucm run.compiled.
+-- termLink requires terms to be in the codebase (hashed), so the service
+-- must be added before the deploy script can reference it.
 --
 -- Workflow from UCM:
 --   1. load test/example/service.u
 --   2. add
---   3. run mainDeploy
+--   3. load test/example/deploy.u
+--   4. run mainDeploy
 
 myService : '{Unex.Storage, IO, Exception} ()
 myService = do
@@ -19,16 +19,3 @@ myService = do
 -- The server runs this term directly with `ucm run.compiled`.
 mainService : '{IO, Exception} ()
 mainService = Unex.main myService
-
-deployScript : '{Unex.Services, IO, Exception} ()
-deployScript = do
-  -- Step 1: push compiled bytecode and get back its Unison hash
-  hash = Unex.Services.deploy "my-service" (termLink mainService)
-
-  -- Step 2: create a stable name pointing to that hash
-  Unex.Services.release "my-service" hash
-
-  printLine ("Deployed: " ++ hash)
-
-main : '{IO, Exception} ()
-main = Unex.main deployScript

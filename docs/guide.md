@@ -282,6 +282,10 @@ See `config.example.exs` for all options, or use environment variables (document
 
 Services are named, long-running Unison programs callable from anywhere in the cluster. Deployment is a two-step process: push bytecode, then name it.
 
+`termLink` requires terms to be in the codebase (hashed via `add`), so the service term and the deploy script live in separate files with an `add` in between.
+
+**File 1 — define and add the service** (`test/example/service.u`):
+
 ```unison
 myService : '{Unex.Storage, IO, Exception} ()
 myService = do
@@ -293,19 +297,33 @@ myService = do
 -- The server runs this term directly with `ucm run.compiled`.
 mainService : '{IO, Exception} ()
 mainService = Unex.main myService
+```
 
+In UCM:
+```
+examples/main> load test/example/service.u
+examples/main> add
+```
+
+**File 2 — deploy** (`test/example/deploy.u`):
+
+```unison
 deployScript : '{Unex.Services, IO, Exception} ()
 deployScript = do
-  -- Step 1: push compiled bytecode and get back its Unison hash
+  -- Push compiled bytecode; returns the Unison hash
   hash = Unex.Services.deploy "my-service" (termLink mainService)
-
-  -- Step 2: create a stable name pointing to that hash
+  -- Point the name at that hash
   Unex.Services.release "my-service" hash
-
   printLine ("Deployed: " ++ hash)
 
-main : '{IO, Exception} ()
-main = Unex.main deployScript
+mainDeploy : '{IO, Exception} ()
+mainDeploy = Unex.main deployScript
+```
+
+In UCM:
+```
+examples/main> load test/example/deploy.u
+examples/main> run mainDeploy
 ```
 
 After deploying, call the service by name from anywhere:
@@ -320,12 +338,10 @@ main : '{IO, Exception} ()
 main = Unex.main callScript
 ```
 
-**Releasing a new version** — deploy new bytecode, then release under the same name:
+**Releasing a new version** — add new service terms, then re-deploy:
 
 ```unison
-mainServiceV2 : '{IO, Exception} ()
-mainServiceV2 = Unex.main myServiceV2
-
+-- After `add`ing myServiceV2 and mainServiceV2:
 releaseScript : '{Unex.Services, IO, Exception} ()
 releaseScript = do
   hash = Unex.Services.deploy "my-service" (termLink mainServiceV2)

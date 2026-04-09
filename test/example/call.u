@@ -1,0 +1,7 @@
+callScript : '{Unex.Services, IO, Exception} ()
+callScript = do
+  result = Unex.Services.call "my-service"
+  printLine result
+
+main : '{IO, Exception} ()
+main = Unex.main callScript
