@@ -35,8 +35,11 @@ defmodule Unex.Services do
   Returns `{:ok, %Entry{}}` on success.
   """
   def release(name, hash) do
-    Registry.register(name, hash, node())
+    Registry.register(name, normalize_hash(hash), node())
   end
+
+  defp normalize_hash("#" <> rest), do: rest
+  defp normalize_hash(hash), do: hash
 
   @doc "Lists all registered services."
   def list do

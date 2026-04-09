@@ -18,11 +18,13 @@ unique ability Unex.Services where
 Unex.Services.handler : Text -> Text -> Request {Unex.Services} a -> {IO, Exception, Http, Threads} a
 Unex.Services.handler baseUrl secret = cases
   { Unex.Services.deploy name link -> k } ->
-    hash = Link.Term.toText link
+    raw = Link.Term.toText link
+    -- Strip leading # so the hash is safe to use in a URL path
+    hash = if Text.take 1 raw == "#" then Text.drop 1 raw else raw
     match Code.lookup link with
       None ->
         msg : Text
-        msg = "Unex.Services.deploy: term not found: " ++ hash
+        msg = "Unex.Services.deploy: term not found: " ++ raw
         Exception.raise (Failure.Failure (typeLink Text) msg (Any ()))
       Some code ->
         bytes = Code.serialize_v3 code

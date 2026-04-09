@@ -331,7 +331,7 @@ After deploying, call the service by name from anywhere:
 ```unison
 callScript : '{Unex.Services, IO, Exception} ()
 callScript = do
-  result = Unex.Services.call "my-service" "{}"
+  result = Unex.Services.call "my-service"
   printLine result
 
 main : '{IO, Exception} ()
