@@ -67,8 +67,8 @@ defmodule Mix.Tasks.Unex.Start do
   end
 
   defp start_without_distribution do
-    # Ensure runtime config is applied
-    ensure_config()
+    Application.get_env(:unex, :mnesia_dir) |> File.mkdir_p!()
+    Application.get_env(:unex, :blobs_dir) |> File.mkdir_p!()
     Application.put_env(:unex, :start_api, true)
     Mix.Task.run("app.start")
 
@@ -79,58 +79,4 @@ defmodule Mix.Tasks.Unex.Start do
     Process.sleep(:infinity)
   end
 
-  defp ensure_config do
-    # Read all UNEX_* env vars and apply them, filling in defaults for anything unset.
-    # This mirrors config/runtime.exs logic for the dev Mix task path.
-    data_dir = System.get_env("UNEX_DATA") || "./data"
-    mnesia_dir = Path.join(data_dir, "mnesia")
-    blobs_dir = Path.join(data_dir, "blobs")
-    File.mkdir_p!(mnesia_dir)
-    File.mkdir_p!(blobs_dir)
-
-    port =
-      case System.get_env("UNEX_PORT") do
-        nil -> 4040
-        val -> String.to_integer(val)
-      end
-
-    encryption_key =
-      case System.get_env("UNEX_CONFIG_KEY") do
-        nil ->
-          key = :crypto.strong_rand_bytes(32) |> Base.encode64()
-          IO.puts("[unex] No encryption key configured. Generated: #{key}")
-          IO.puts("[unex] Set UNEX_CONFIG_KEY to persist this key across restarts.")
-          IO.puts("[unex] WARNING: If the key changes, existing encrypted Config values become unreadable.")
-          key
-
-        key ->
-          key
-      end
-
-    api_secret =
-      case System.get_env("UNEX_SECRET") do
-        nil ->
-          secret = Base.encode64(:crypto.strong_rand_bytes(32))
-          IO.puts("[unex] No API secret configured. Generated: #{secret}")
-          IO.puts("[unex] Set UNEX_SECRET to persist this secret across restarts.")
-          secret
-
-        secret ->
-          secret
-      end
-
-    peers =
-      case System.get_env("UNEX_PEERS") do
-        nil -> []
-        val -> String.split(val, ",", trim: true) |> Enum.map(&String.trim/1)
-      end
-
-    Application.put_env(:unex, :api_port, port)
-    Application.put_env(:unex, :mnesia_dir, mnesia_dir)
-    Application.put_env(:unex, :blobs_dir, blobs_dir)
-    Application.put_env(:unex, :config_encryption_key, encryption_key)
-    Application.put_env(:unex, :api_secret, api_secret)
-    Application.put_env(:unex, :ucm_path, System.get_env("UCM_PATH") || "ucm")
-    Application.put_env(:unex, :peers, peers)
-  end
 end
