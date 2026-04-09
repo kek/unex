@@ -34,6 +34,13 @@ Unex.Http.deleteReq : Text -> Text -> {IO, Exception, Http, Threads} HttpRespons
 Unex.Http.deleteReq secret url =
   Http.request (Unex.Http.authHeader secret (HttpRequest.delete (URI.parse url)))
 
+Unex.Http.putBytes : Text -> Text -> Bytes -> {IO, Exception, Http, Threads} HttpResponse
+Unex.Http.putBytes secret url bytes =
+  Http.request
+    (Unex.Http.authHeader secret
+      (HttpRequest.addHeader "Content-Type" "application/octet-stream"
+        (HttpRequest.put (URI.parse url) (Body.fromBytes bytes))))
+
 Unex.Http.getStatus : HttpResponse -> Nat
 Unex.Http.getStatus resp = code (HttpResponse.status resp)
 

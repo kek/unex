@@ -1,0 +1,18 @@
+myService : '{Unex.Storage, IO, Exception} ()
+myService = do
+  Unex.Storage.createDatabase "svc"
+  Unex.Storage.writeCell "svc" "hits" "0"
+  printLine "Service started"
+
+deployScript : '{Unex.Services, IO, Exception} ()
+deployScript = do
+  -- Step 1: push bytecode and get back its Unison hash
+  hash = Unex.Services.deploy (termLink myService) (toText (termLink myService))
+
+  -- Step 2: create a stable name pointing to that hash
+  Unex.Services.release "my-service" hash
+
+  printLine ("Deployed: " ++ hash)
+
+mainService : '{IO, Exception} ()
+mainService = Unex.main deployScript

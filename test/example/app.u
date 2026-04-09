@@ -27,5 +27,5 @@ visitorCounter = do
 
   printLine "Done!"
 
-main : '{IO, Exception} ()
-main = Unex.main visitorCounter
+mainCounter : '{IO, Exception} ()
+mainCounter = Unex.main visitorCounter
