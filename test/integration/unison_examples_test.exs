@@ -8,6 +8,8 @@ defmodule Unex.Integration.UnisonExamplesTest do
   """
   use ExUnit.Case, async: false
 
+  @moduletag :integration
+
   @test_port 4043
 
   setup_all do

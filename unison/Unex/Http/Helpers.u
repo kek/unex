@@ -37,7 +37,7 @@ Unex.Http.deleteReq secret url =
 Unex.Http.postBytesJson : Text -> Text -> Bytes -> {IO, Exception, Http, Threads} HttpResponse
 Unex.Http.postBytesJson secret url bytes =
   encoded = Text.fromUtf8 (Bytes.toBase16 bytes)
-  Unex.Http.postJson secret url ("{\"data\":\"" ++ encoded ++ "\"}")
+  Unex.Http.postJson secret url (Unex.Http.toJson [("data", encoded)])
 
 Unex.Http.getStatus : HttpResponse -> Nat
 Unex.Http.getStatus resp = code (HttpResponse.status resp)
