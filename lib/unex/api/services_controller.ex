@@ -6,24 +6,6 @@ defmodule Unex.API.ServicesController do
   alias Unex.API.Json
   alias Unex.Services
 
-  def deploy(conn) do
-    {:ok, params} = Json.read_json(conn)
-    name = params["name"]
-    source = params["source"]
-
-    case Services.deploy(name, source) do
-      {:ok, entry} ->
-        Json.send_json(conn, 201, %{
-          name: entry.name,
-          hash: entry.hash,
-          node: to_string(entry.node)
-        })
-
-      {:error, reason} ->
-        Json.send_json(conn, 422, %{error: inspect(reason)})
-    end
-  end
-
   def call(conn, name) do
     case Services.call(name) do
       {:ok, result} ->
@@ -65,7 +47,7 @@ defmodule Unex.API.ServicesController do
         Json.send_json(conn, 422, %{error: "hash is required"})
 
       hash ->
-        :ok = Services.release(name, hash)
+        {:ok, _entry} = Services.release(name, hash)
         Json.send_json(conn, 200, %{name: name, hash: hash})
     end
   end

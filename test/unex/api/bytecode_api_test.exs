@@ -8,13 +8,13 @@ defmodule Unex.API.BytecodeApiTest do
 
   @opts Router.init([])
 
-  defp call(method, path, body \\ nil, content_type \\ "application/octet-stream") do
+  defp call(method, path, body \\ nil) do
     secret = Application.get_env(:unex, :api_secret)
 
     conn =
       if body do
         conn(method, path, body)
-        |> put_req_header("content-type", content_type)
+        |> put_req_header("content-type", "application/json")
       else
         conn(method, path)
       end
@@ -24,11 +24,15 @@ defmodule Unex.API.BytecodeApiTest do
     |> Router.call(@opts)
   end
 
-  test "PUT /bytecode/:hash stores bytes and returns 201 with hash" do
+  defp hex_body(bytes) do
+    Jason.encode!(%{data: Base.encode16(bytes)})
+  end
+
+  test "POST /bytecode/:hash stores bytes and returns 201 with hash" do
     bytes = "fake-bytecode-data-#{System.unique_integer()}"
     hash = "test#{System.unique_integer([:positive])}"
 
-    conn = call(:put, "/bytecode/#{hash}", bytes)
+    conn = call(:post, "/bytecode/#{hash}", hex_body(bytes))
     assert conn.status == 201
 
     body = Jason.decode!(conn.resp_body)
@@ -53,12 +57,12 @@ defmodule Unex.API.BytecodeApiTest do
     assert body["error"] == "not_found"
   end
 
-  test "PUT /bytecode/:hash is idempotent" do
+  test "POST /bytecode/:hash is idempotent" do
     bytes = "idempotent-data-#{System.unique_integer()}"
     hash = "idem#{System.unique_integer([:positive])}"
 
-    conn1 = call(:put, "/bytecode/#{hash}", bytes)
-    conn2 = call(:put, "/bytecode/#{hash}", bytes)
+    conn1 = call(:post, "/bytecode/#{hash}", hex_body(bytes))
+    conn2 = call(:post, "/bytecode/#{hash}", hex_body(bytes))
     assert conn1.status == 201
     assert conn2.status == 201
   end

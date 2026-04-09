@@ -74,7 +74,7 @@ defmodule Unex.API.Router do
   end
 
   # Bytecode routes
-  put "/bytecode/:hash" do
+  post "/bytecode/:hash" do
     BytecodeController.put(conn, hash)
   end
 
@@ -83,10 +83,6 @@ defmodule Unex.API.Router do
   end
 
   # Services routes
-
-  post "/services/deploy" do
-    ServicesController.deploy(conn)
-  end
 
   post "/services/:name/release" do
     ServicesController.release(conn, name)

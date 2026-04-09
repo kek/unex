@@ -7,25 +7,7 @@ defmodule Unex.Services do
 
   alias Unex.Services.Registry
   alias Unex.Services.Registry.Entry
-  alias Unex.Cluster.HashCache
   alias Unex.Remote
-
-  @doc """
-  Compiles source code, caches the bytecode, and registers it as a named service.
-
-  Options:
-    - `:entry` — the entry point symbol (default: `"main"`)
-
-  Returns `{:ok, %Entry{}}` on success or `{:error, reason}` on failure.
-  """
-  def deploy(name, source, opts \\ []) do
-    entry_point = Keyword.get(opts, :entry, "main")
-
-    with {:ok, uc_bytes} <- compile_source(source, entry_point) do
-      hash = HashCache.put(uc_bytes)
-      Registry.register(name, hash, node())
-    end
-  end
 
   @doc """
   Calls a named service by resolving its registry entry and executing its bytecode.
@@ -47,14 +29,13 @@ defmodule Unex.Services do
   @doc """
   Points a service name at an existing bytecode hash.
 
-  This is how versioning and rollback work: `deploy` uploads bytecode and
-  returns a hash; `release` moves the name pointer to any existing hash.
+  This is how versioning and rollback work: bytecode is pushed via PUT /bytecode/:hash
+  first, then `release` moves the name pointer to any existing hash.
 
-  Returns `:ok` unconditionally — the hash need not exist yet.
+  Returns `{:ok, %Entry{}}` on success.
   """
   def release(name, hash) do
-    {:ok, _entry} = Registry.register(name, hash, node())
-    :ok
+    Registry.register(name, hash, node())
   end
 
   @doc "Lists all registered services."
@@ -67,24 +48,4 @@ defmodule Unex.Services do
     Registry.unregister(name)
   end
 
-  # ---------------------------------------------------------------------------
-  # Private
-  # ---------------------------------------------------------------------------
-
-  defp compile_source(source, entry_point) do
-    dir = Path.join(System.tmp_dir!(), "unex_svc_#{System.unique_integer([:positive])}")
-
-    with {:ok, workspace} <- Unex.Workspace.create(dir),
-         {:ok, file_path} <- Unex.Workspace.write_source(workspace, "service.u", source),
-         {:ok, uc_path} <- Unex.Compiler.compile(workspace, file_path, entry_point, "service") do
-      uc_bytes = File.read!(uc_path)
-      Unex.Workspace.destroy(workspace)
-      {:ok, uc_bytes}
-    else
-      error ->
-        # Clean up workspace on error if it was created
-        if File.dir?(dir), do: File.rm_rf!(dir)
-        error
-    end
-  end
 end

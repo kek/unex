@@ -4,6 +4,7 @@ defmodule Unex.API.ServicesApiTest do
   import Plug.Conn
 
   alias Unex.API.Router
+  alias Unex.Cluster.HashCache
 
   @moduletag timeout: 300_000
 
@@ -29,27 +30,15 @@ defmodule Unex.API.ServicesApiTest do
     Jason.decode!(conn.resp_body)
   end
 
-  test "POST /services/deploy returns 201 with name and hash" do
-    source = "main : '{IO, Exception} ()\nmain = do printLine \"api-hello\""
+  test "POST /services/:name/release returns 200 with name and hash" do
+    hash = HashCache.put("api_release_bytes_#{System.unique_integer()}")
 
-    conn = call(:post, "/services/deploy", %{"name" => "api-svc", "source" => source})
-    assert conn.status == 201
-
-    body = json_body(conn)
-    assert body["name"] == "api-svc"
-    assert is_binary(body["hash"])
-    assert is_binary(body["node"])
-  end
-
-  test "POST /services/:name/call returns 200 with stdout" do
-    source = "main : '{IO, Exception} ()\nmain = do printLine \"api-call-ok\""
-    call(:post, "/services/deploy", %{"name" => "call-svc", "source" => source})
-
-    conn = call(:post, "/services/call-svc/call")
+    conn = call(:post, "/services/api-svc/release", %{"hash" => hash})
     assert conn.status == 200
 
     body = json_body(conn)
-    assert body["stdout"] =~ "api-call-ok"
+    assert body["name"] == "api-svc"
+    assert body["hash"] == hash
   end
 
   test "POST /services/unknown/call returns 404" do
@@ -59,8 +48,8 @@ defmodule Unex.API.ServicesApiTest do
   end
 
   test "GET /services returns 200 with list" do
-    source = "main : '{IO, Exception} ()\nmain = do printLine \"list-me\""
-    call(:post, "/services/deploy", %{"name" => "list-api-svc", "source" => source})
+    hash = HashCache.put("list_api_bytes_#{System.unique_integer()}")
+    call(:post, "/services/list-api-svc/release", %{"hash" => hash})
 
     conn = call(:get, "/services")
     assert conn.status == 200
@@ -71,8 +60,8 @@ defmodule Unex.API.ServicesApiTest do
   end
 
   test "DELETE /services/:name returns 200, then call returns 404" do
-    source = "main : '{IO, Exception} ()\nmain = do printLine \"del-me\""
-    call(:post, "/services/deploy", %{"name" => "del-svc", "source" => source})
+    hash = HashCache.put("del_api_bytes_#{System.unique_integer()}")
+    call(:post, "/services/del-svc/release", %{"hash" => hash})
 
     conn = call(:delete, "/services/del-svc")
     assert conn.status == 200

@@ -7,6 +7,7 @@ defmodule Unex.Integration.ServicesClusterTest do
   alias Unex.Services.Registry
 
   @moduletag timeout: 300_000
+  @moduletag :integration
 
   setup_all do
     unless Node.alive?() do
@@ -37,29 +38,20 @@ defmodule Unex.Integration.ServicesClusterTest do
     %{peer: peer}
   end
 
-  test "deploy on local, call from peer by name", %{peer: peer} do
-    source = """
-    main : '{IO, Exception} ()
-    main = do printLine "cross-node-svc"
-    """
-
-    {:ok, entry} = Services.deploy("remote_greeter", source)
+  test "release on local, call from peer by name", %{peer: peer} do
+    hash = HashCache.put("cross-node-fake-bytecode-#{System.unique_integer()}")
+    {:ok, entry} = Services.release("remote_greeter", hash)
     assert entry.name == "remote_greeter"
     assert entry.node == node()
 
-    # Peer calls Services.call which resolves via Registry (asks peers) then
-    # Remote.execute syncs bytecode and runs it
-    assert {:ok, result} = :rpc.call(peer, Services, :call, ["remote_greeter"])
-    assert result.stdout =~ "cross-node-svc"
+    # Peer resolves via Registry (asks peers)
+    assert {:ok, resolved} = :rpc.call(peer, Registry, :resolve, ["remote_greeter"])
+    assert resolved.hash == hash
   end
 
   test "peer resolve finds service registered on local node", %{peer: peer} do
-    source = """
-    main : '{IO, Exception} ()
-    main = do printLine "resolve-check"
-    """
-
-    {:ok, entry} = Services.deploy("resolve_target", source)
+    hash = HashCache.put("resolve-check-fake-bytecode-#{System.unique_integer()}")
+    {:ok, entry} = Services.release("resolve_target", hash)
 
     # Peer's local lookup should not find it
     assert :not_found = :rpc.call(peer, Registry, :lookup, [Registry, "resolve_target"])

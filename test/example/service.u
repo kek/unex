@@ -1,18 +1,32 @@
+-- Example: Deploy a service using Code.lookup-based bytecode push.
+--
+-- myService is the application logic using Unex abilities.
+-- mainService wraps it with Unex.main so connection details come from env vars.
+-- The server receives fully compiled bytecode and runs it with ucm run.compiled.
+--
+-- Workflow from UCM:
+--   1. load test/example/service.u
+--   2. add
+--   3. run mainDeploy
+
 myService : '{Unex.Storage, IO, Exception} ()
 myService = do
   Unex.Storage.createDatabase "svc"
   Unex.Storage.writeCell "svc" "hits" "0"
   printLine "Service started"
 
+-- Wrap with Unex.main so UNEX_URL and UNEX_SECRET are read from env at runtime.
+-- This is the term whose bytecode gets pushed — it is self-contained.
+mainService : '{IO, Exception} ()
+mainService = Unex.main myService
+
 deployScript : '{Unex.Services, IO, Exception} ()
 deployScript = do
-  -- Step 1: push bytecode and get back its Unison hash
-  hash = Unex.Services.deploy (termLink myService) (toText (termLink myService))
-
-  -- Step 2: create a stable name pointing to that hash
+  -- deploy pushes bytecode for mainService and returns its Unison hash
+  hash = Unex.Services.deploy "my-service" (termLink mainService)
+  -- release points the name at the hash (or update to a new hash later)
   Unex.Services.release "my-service" hash
-
   printLine ("Deployed: " ++ hash)
 
-mainService : '{IO, Exception} ()
-mainService = Unex.main deployScript
+mainDeploy : '{IO, Exception} ()
+mainDeploy = Unex.main deployScript

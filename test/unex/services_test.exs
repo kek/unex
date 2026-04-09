@@ -3,47 +3,32 @@ defmodule Unex.ServicesTest do
 
   alias Unex.Services
   alias Unex.Services.Registry.Entry
+  alias Unex.Cluster.HashCache
 
-  @moduletag timeout: 180_000
+  @moduletag timeout: 120_000
 
-  test "deploy and call a service" do
-    source = "main : '{IO, Exception} ()\nmain = do printLine \"svc-hello\""
-    assert {:ok, %Entry{name: "hello-svc"}} = Services.deploy("hello-svc", source)
-
-    assert {:ok, result} = Services.call("hello-svc")
-    assert result.stdout =~ "svc-hello"
-  end
-
-  test "redeploy updates hash and call returns new output" do
-    source_v1 = "main : '{IO, Exception} ()\nmain = do printLine \"version-1\""
-    source_v2 = "main : '{IO, Exception} ()\nmain = do printLine \"version-2\""
-
-    assert {:ok, %Entry{hash: hash1}} = Services.deploy("redeploy-svc", source_v1)
-    assert {:ok, %Entry{hash: hash2}} = Services.deploy("redeploy-svc", source_v2)
-    assert hash1 != hash2
-
-    assert {:ok, result} = Services.call("redeploy-svc")
-    assert result.stdout =~ "version-2"
+  test "release registers name and resolves to correct hash" do
+    hash = HashCache.put("fake_bytes_#{System.unique_integer()}")
+    {:ok, %Entry{name: "rel-test", hash: ^hash}} = Services.release("rel-test", hash)
+    assert {:ok, %Entry{name: "rel-test", hash: ^hash}} =
+             Unex.Services.Registry.resolve("rel-test")
   end
 
   test "call unknown service returns not_found" do
-    assert {:error, :not_found} = Services.call("no-such-service")
+    assert {:error, :not_found} = Services.call("no-such-service-xyz")
   end
 
-  test "list includes deployed service" do
-    source = "main : '{IO, Exception} ()\nmain = do printLine \"listed\""
-    {:ok, _} = Services.deploy("listed-svc", source)
-
-    entries = Services.list()
-    names = Enum.map(entries, & &1.name)
-    assert "listed-svc" in names
+  test "list includes released service" do
+    hash = HashCache.put("listed_bytes_#{System.unique_integer()}")
+    Services.release("listed-svc-test", hash)
+    names = Services.list() |> Enum.map(& &1.name)
+    assert "listed-svc-test" in names
   end
 
   test "undeploy then call returns not_found" do
-    source = "main : '{IO, Exception} ()\nmain = do printLine \"bye\""
-    {:ok, _} = Services.deploy("temp-svc", source)
-    :ok = Services.undeploy("temp-svc")
-
-    assert {:error, :not_found} = Services.call("temp-svc")
+    hash = HashCache.put("temp_bytes_#{System.unique_integer()}")
+    Services.release("temp-svc-test", hash)
+    :ok = Services.undeploy("temp-svc-test")
+    assert {:error, :not_found} = Services.call("temp-svc-test")
   end
 end

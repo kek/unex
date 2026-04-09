@@ -2,7 +2,7 @@ defmodule Unex.API.BytecodeController do
   @moduledoc """
   HTTP handler for pushing and pulling bytecode blobs, keyed by hash.
 
-  PUT /bytecode/:hash  — store raw bytecode bytes under the given hash
+  POST /bytecode/:hash  — push bytecode bytes (hex JSON) under the given hash
   GET /bytecode/:hash  — retrieve bytecode bytes by hash
 
   The hash is the *Unison hash* of the compiled definition — supplied by the
@@ -17,19 +17,13 @@ defmodule Unex.API.BytecodeController do
   def put(conn, hash) do
     hash = normalize_hash(hash)
 
-    # Plug.Parsers is configured with pass: ["application/octet-stream"],
-    # which means it does not read or consume binary request bodies.
-    # read_body/1 therefore receives the full body here.
-    case Plug.Conn.read_body(conn, length: 50_000_000) do
-      {:ok, bytes, conn} ->
-        HashCache.put(HashCache, hash, bytes)
-        Json.send_json(conn, 201, %{hash: hash})
-
-      {:more, _partial, conn} ->
-        Json.send_json(conn, 413, %{error: "payload_too_large"})
-
-      {:error, reason} ->
-        Json.send_json(conn, 400, %{error: inspect(reason)})
+    with {:ok, body} <- Json.read_json(conn),
+         %{"data" => hex} <- body,
+         {:ok, bytes} <- Base.decode16(hex, case: :mixed) do
+      HashCache.put(HashCache, hash, bytes)
+      Json.send_json(conn, 201, %{hash: hash})
+    else
+      _ -> Json.send_json(conn, 400, %{error: "invalid_payload"})
     end
   end
 

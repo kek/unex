@@ -4,6 +4,7 @@ defmodule Unex.API.ServicesReleaseApiTest do
   import Plug.Conn
 
   alias Unex.API.Router
+  alias Unex.Cluster.HashCache
 
   @opts Router.init([])
 
@@ -28,10 +29,7 @@ defmodule Unex.API.ServicesReleaseApiTest do
   @moduletag timeout: 180_000
 
   test "POST /services/:name/release returns 200 with name and hash" do
-    source = "main : '{IO, Exception} ()\nmain = do printLine \"release-test\""
-    deploy_conn = call(:post, "/services/deploy", %{"name" => "relapi-svc", "source" => source})
-    assert deploy_conn.status == 201
-    hash = json_body(deploy_conn)["hash"]
+    hash = HashCache.put("relapi_bytes_#{System.unique_integer()}")
 
     conn = call(:post, "/services/relapi-svc/release", %{"hash" => hash})
     assert conn.status == 200
@@ -44,17 +42,5 @@ defmodule Unex.API.ServicesReleaseApiTest do
   test "POST /services/:name/release without hash returns 422" do
     conn = call(:post, "/services/bad-svc/release", %{})
     assert conn.status == 422
-  end
-
-  test "released service is callable" do
-    source = "main : '{IO, Exception} ()\nmain = do printLine \"released-ok\""
-    deploy_conn = call(:post, "/services/deploy", %{"name" => "callrel-svc", "source" => source})
-    hash = json_body(deploy_conn)["hash"]
-
-    call(:post, "/services/callrel-svc/release", %{"hash" => hash})
-
-    conn = call(:post, "/services/callrel-svc/call")
-    assert conn.status == 200
-    assert json_body(conn)["stdout"] =~ "released-ok"
   end
 end

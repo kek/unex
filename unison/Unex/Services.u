@@ -21,7 +21,9 @@ Unex.Services.handler baseUrl secret = cases
     hash = Link.Term.toText link
     match Code.lookup link with
       None ->
-        Exception.raise ("Unex.Services.deploy: term not found: " ++ hash)
+        msg : Text
+        msg = "Unex.Services.deploy: term not found: " ++ hash
+        Exception.raise (Failure.Failure (typeLink Text) msg (Any ()))
       Some code ->
         bytes = Code.serialize_v3 code
         _ = Unex.Http.putBytes secret (baseUrl ++ "/bytecode/" ++ hash) bytes
