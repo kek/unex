@@ -289,10 +289,15 @@ myService = do
   Unex.Storage.writeCell "svc" "hits" "0"
   printLine "Service started"
 
+-- Wrap with Unex.main so env-var credentials are baked into the bytecode.
+-- The server runs this term directly with `ucm run.compiled`.
+mainService : '{IO, Exception} ()
+mainService = Unex.main myService
+
 deployScript : '{Unex.Services, IO, Exception} ()
 deployScript = do
-  -- Step 1: push bytecode and get back its Unison hash
-  hash = Unex.Services.deploy (termLink myService) (toText (termLink myService))
+  -- Step 1: push compiled bytecode and get back its Unison hash
+  hash = Unex.Services.deploy "my-service" (termLink mainService)
 
   -- Step 2: create a stable name pointing to that hash
   Unex.Services.release "my-service" hash
@@ -318,9 +323,12 @@ main = Unex.main callScript
 **Releasing a new version** — deploy new bytecode, then release under the same name:
 
 ```unison
+mainServiceV2 : '{IO, Exception} ()
+mainServiceV2 = Unex.main myServiceV2
+
 releaseScript : '{Unex.Services, IO, Exception} ()
 releaseScript = do
-  hash = Unex.Services.deploy (termLink myServiceV2) (toText (termLink myServiceV2))
+  hash = Unex.Services.deploy "my-service" (termLink mainServiceV2)
   Unex.Services.release "my-service" hash   -- atomically moves the pointer
   printLine ("Released v2: " ++ hash)
 ```
