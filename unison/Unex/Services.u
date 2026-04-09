@@ -1,14 +1,15 @@
 -- Unex Services Ability
 -- Deploy, call, list, undeploy, and release named services.
 --
--- "deploy" compiles source and returns a hash.
+-- "deploy" takes a term link, serializes bytecode via Code.lookup, and pushes to the server.
 -- "release" points a service name at any existing hash (for versioning/rollback).
 
+use lib.base.reflection
 
 structural type Unex.ServiceInfo = { name : Text, hash : Text, node : Text }
 
 unique ability Unex.Services where
-  deploy : Text -> Text -> Text
+  deploy : Text -> Link.Term -> Text
   release : Text -> Text -> ()
   call : Text -> Text
   list : [Unex.ServiceInfo]
@@ -16,11 +17,15 @@ unique ability Unex.Services where
 
 Unex.Services.handler : Text -> Text -> Request {Unex.Services} a -> {IO, Exception, Http, Threads} a
 Unex.Services.handler baseUrl secret = cases
-  { Unex.Services.deploy name source -> k } ->
-    body = bodyText (Unex.Http.postJson secret
-          (baseUrl ++ "/services/deploy")
-          ("{\"name\":\"" ++ name ++ "\",\"source\":\"" ++ source ++ "\"}"))
-    handle k body with Unex.Services.handler baseUrl secret
+  { Unex.Services.deploy name link -> k } ->
+    hash = Link.Term.toText link
+    match Code.lookup link with
+      None ->
+        Exception.raise ("Unex.Services.deploy: term not found: " ++ hash)
+      Some code ->
+        bytes = Code.serialize_v3 code
+        _ = Unex.Http.putBytes secret (baseUrl ++ "/bytecode/" ++ hash) bytes
+        handle k hash with Unex.Services.handler baseUrl secret
 
   { Unex.Services.release name hash -> k } ->
     _ = Unex.Http.postJson secret
