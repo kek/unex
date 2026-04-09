@@ -1,11 +1,15 @@
 -- Unex Services Ability
--- Deploy, call, list, and undeploy named services.
+-- Deploy, call, list, undeploy, and release named services.
+--
+-- "deploy" compiles source and returns a hash.
+-- "release" points a service name at any existing hash (for versioning/rollback).
 
 
 structural type Unex.ServiceInfo = { name : Text, hash : Text, node : Text }
 
 unique ability Unex.Services where
   deploy : Text -> Text -> Text
+  release : Text -> Text -> ()
   call : Text -> Text
   list : [Unex.ServiceInfo]
   undeploy : Text -> ()
@@ -18,13 +22,18 @@ Unex.Services.handler baseUrl secret = cases
           ("{\"name\":\"" ++ name ++ "\",\"source\":\"" ++ source ++ "\"}"))
     handle k body with Unex.Services.handler baseUrl secret
 
+  { Unex.Services.release name hash -> k } ->
+    _ = Unex.Http.postJson secret
+          (baseUrl ++ "/services/" ++ name ++ "/release")
+          ("{\"hash\":\"" ++ hash ++ "\"}")
+    handle k () with Unex.Services.handler baseUrl secret
+
   { Unex.Services.call name -> k } ->
     body = bodyText (Unex.Http.postEmpty secret (baseUrl ++ "/services/" ++ name ++ "/call"))
     handle k body with Unex.Services.handler baseUrl secret
 
   { Unex.Services.list -> k } ->
     _ = Unex.Http.getJson secret (baseUrl ++ "/services")
-    -- Return empty list — full JSON array parsing is complex
     handle k [] with Unex.Services.handler baseUrl secret
 
   { Unex.Services.undeploy name -> k } ->

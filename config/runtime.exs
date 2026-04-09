@@ -57,7 +57,7 @@ if config_env() != :test do
       {key, true}
     end
 
-  api_secret = get.("UNEX_API_SECRET", :api_secret, nil)
+  api_secret = get.("UNEX_SECRET", :api_secret, nil)
 
   {api_secret, secret_generated?} =
     if api_secret do
@@ -97,6 +97,6 @@ if config_env() != :test do
 
   if secret_generated? do
     IO.puts("[unex] No API secret configured. Generated: #{api_secret}")
-    IO.puts("[unex] Set UNEX_API_SECRET to persist this secret across restarts.")
+    IO.puts("[unex] Set UNEX_SECRET to persist this secret across restarts.")
   end
 end

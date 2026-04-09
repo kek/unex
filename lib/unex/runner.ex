@@ -42,25 +42,37 @@ defmodule Unex.Runner do
   Options:
     - `:timeout` - max execution time in ms (default: 30_000)
     - `:args` - list of string arguments to pass to the program
+    - `:env` - list of `{"KEY", "VALUE"}` string tuples to set as env vars in the subprocess
   """
   def run_compiled(uc_path, opts \\ []) do
     {:ok, ucm} = Unex.UCM.find()
     timeout = Keyword.get(opts, :timeout, configured_timeout())
     args = Keyword.get(opts, :args, [])
+    env = Keyword.get(opts, :env, [])
 
     ucm_args = ["run.compiled", uc_path] ++ args
 
-    run_ucm(ucm, ucm_args, timeout)
+    run_ucm(ucm, ucm_args, timeout, env)
   end
 
-  defp run_ucm(ucm, args, timeout) do
-    port =
-      Port.open({:spawn_executable, ucm}, [
+  defp run_ucm(ucm, args, timeout, env \\ []) do
+    port_opts =
+      [
         :binary,
         :exit_status,
         :stderr_to_stdout,
         args: args
-      ])
+      ]
+
+    port_opts =
+      if env == [] do
+        port_opts
+      else
+        charlist_env = Enum.map(env, fn {k, v} -> {String.to_charlist(k), String.to_charlist(v)} end)
+        [{:env, charlist_env} | port_opts]
+      end
+
+    port = Port.open({:spawn_executable, ucm}, port_opts)
 
     collect_output(port, "", timeout)
   end

@@ -28,4 +28,11 @@ defmodule Unex.RemoteTest do
     fake_hash = Unex.Cluster.HashCache.hash_of("nonexistent")
     assert {:error, _} = Remote.execute(fake_hash)
   end
+
+  test "execute/2 smoke test: env injection does not crash subprocess", %{hash: hash} do
+    # Smoke test: env vars are injected; the existing "remote-ok" bytecode doesn't
+    # use them but the subprocess must not crash because of them.
+    assert {:ok, result} = Remote.execute(hash, timeout: 60_000)
+    assert result.exit_code == 0
+  end
 end

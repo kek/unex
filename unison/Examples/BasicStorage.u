@@ -1,6 +1,6 @@
 -- Example: Basic Storage operations using Unex.Storage ability
 --
--- Run with: (Unex server must be running on localhost:4040)
+-- Set UNEX_URL and UNEX_SECRET env vars, then run from UCM:
 --   myProject/main> run Examples.BasicStorage.main
 
 
@@ -30,5 +30,4 @@ Examples.BasicStorage.app = do
   printLine "Done!"
 
 Examples.BasicStorage.main : '{IO, Exception} ()
-Examples.BasicStorage.main =
-  Unex.main "http://localhost:4040" "my-secret" Examples.BasicStorage.app
+Examples.BasicStorage.main = Unex.main Examples.BasicStorage.app

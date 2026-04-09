@@ -44,6 +44,19 @@ defmodule Unex.Services do
     end
   end
 
+  @doc """
+  Points a service name at an existing bytecode hash.
+
+  This is how versioning and rollback work: `deploy` uploads bytecode and
+  returns a hash; `release` moves the name pointer to any existing hash.
+
+  Returns `:ok` unconditionally — the hash need not exist yet.
+  """
+  def release(name, hash) do
+    {:ok, _entry} = Registry.register(name, hash, node())
+    :ok
+  end
+
   @doc "Lists all registered services."
   def list do
     Registry.list()

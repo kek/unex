@@ -49,9 +49,7 @@ Unex.Storage.handler baseUrl secret = cases
     handle k () with Unex.Storage.handler baseUrl secret
 
   { Unex.Storage.scan db table from to -> k } ->
-    resp = Unex.Http.postJson secret
-      (baseUrl ++ "/databases/" ++ db ++ "/tables/" ++ table ++ "/scan")
-      (Unex.Http.toJson [("from", from), ("to", to)])
+    resp = Unex.Http.postJson secret (baseUrl ++ "/databases/" ++ db ++ "/tables/" ++ table ++ "/scan") (Unex.Http.toJson [("from", from), ("to", to)])
     -- Parse scan response: {"results":[{"key":"k","value":"v"},...]}
     -- Simple: return empty for now, scan returns raw pairs
     handle k [] with Unex.Storage.handler baseUrl secret

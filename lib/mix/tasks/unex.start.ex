@@ -108,11 +108,11 @@ defmodule Mix.Tasks.Unex.Start do
       end
 
     api_secret =
-      case System.get_env("UNEX_API_SECRET") do
+      case System.get_env("UNEX_SECRET") do
         nil ->
           secret = Base.encode64(:crypto.strong_rand_bytes(32))
           IO.puts("[unex] No API secret configured. Generated: #{secret}")
-          IO.puts("[unex] Set UNEX_API_SECRET to persist this secret across restarts.")
+          IO.puts("[unex] Set UNEX_SECRET to persist this secret across restarts.")
           secret
 
         secret ->

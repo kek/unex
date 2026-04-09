@@ -51,7 +51,7 @@ Plug router dispatches to controllers. `Auth` plug enforces bearer token (`Autho
 
 ## Configuration
 
-Resolved in order (first wins): env vars → config file (`UNEX_CONFIG`) → defaults. Key env vars: `UNEX_NODE`, `UNEX_COOKIE`, `UNEX_PORT` (default 4040), `UNEX_DATA` (default `./data`), `UNEX_PEERS`, `UNEX_API_SECRET` (auto-generated if not set), `UNEX_CONFIG_KEY`, `UCM_PATH`.
+Resolved in order (first wins): env vars → config file (`UNEX_CONFIG`) → defaults. Key env vars: `UNEX_NODE`, `UNEX_COOKIE`, `UNEX_PORT` (default 4040), `UNEX_DATA` (default `./data`), `UNEX_PEERS`, `UNEX_SECRET` (auto-generated if not set), `UNEX_CONFIG_KEY`, `UCM_PATH`.
 
 ## Test Structure
 

@@ -26,28 +26,29 @@ You now have durable storage (Mnesia), encrypted config, blob storage, ephemeral
 
 ## Part 2: Set up your Unison project
 
-Open a new terminal. Create a Unison project and install the HTTP library:
+Open a new terminal. Create a Unison project and install the libraries:
 
 ```
 ucm
 
 .> project.create myapp
 myapp/main> lib.install @unison/http
+myapp/main> lib.install @kek/unex
 ```
 
-Now copy the Unex ability library into your project. From the repo root:
-
-```bash
-cp -r unison/ /path/to/your/unison/project/
-```
-
-The `unison/` directory contains:
+The `@kek/unex` library provides:
 - **Ability definitions** — `Unex.Storage`, `Unex.Config`, `Unex.Blobs`, `Unex.Scratch`, `Unex.Log`, `Unex.Remote`, `Unex.Services`
 - **HTTP handlers** — translate each ability into calls to the Unex API
 - **`Unex.main`** — composes all handlers so you can use every ability at once
-- **Examples** — working programs you can run immediately
 
 ## Part 3: Your first Unison program on Unex
+
+Before running, tell your shell where the server is. The secret is printed when you start the server:
+
+```bash
+export UNEX_URL=http://localhost:4040
+export UNEX_SECRET=<secret-printed-at-startup>
+```
 
 Create a file `app.u` in your project:
 
@@ -76,8 +77,10 @@ myApp = do
   printLine "Done!"
 
 main : '{IO, Exception} ()
-main = Unex.main "http://localhost:4040" "my-secret" myApp
+main = Unex.main myApp
 ```
+
+`Unex.main` reads `UNEX_URL` and `UNEX_SECRET` from your environment — no credentials in code. Your app is safe to share on Unison Share.
 
 Load and run it in UCM (with `mix unex.start` running in another terminal):
 
@@ -126,7 +129,7 @@ secretsApp = do
   printLine ("Prod keys: " ++ Text.join ", " keys)
 
 main : '{IO, Exception} ()
-main = Unex.main "http://localhost:4040" "my-secret" secretsApp
+main = Unex.main secretsApp
 ```
 
 ```
@@ -153,7 +156,7 @@ cacheApp = do
   Unex.Scratch.delete "session:user42"
 
 main : '{IO, Exception} ()
-main = Unex.main "http://localhost:4040" "my-secret" cacheApp
+main = Unex.main cacheApp
 ```
 
 ## Part 6: Composing multiple abilities
@@ -191,7 +194,7 @@ fullApp = do
   printLine "All done!"
 
 main : '{IO, Exception} ()
-main = Unex.main "http://localhost:4040" "my-secret" fullApp
+main = Unex.main fullApp
 ```
 
 ### Using individual handlers
@@ -202,17 +205,20 @@ You don't have to use all seven abilities. Compose only what you need:
 -- Only Storage
 main : '{IO, Exception} ()
 main = do
+  url = Optional.getOrElse "http://localhost:4040" (Either.toOptional (catch do IO.getEnv "UNEX_URL"))
+  secret = Optional.getOrElse "" (Either.toOptional (catch do IO.getEnv "UNEX_SECRET"))
   Threads.run do Http.run do
-    handle !myStorageApp with Unex.Storage.handler "http://localhost:4040" "my-secret"
+    handle !myStorageApp with Unex.Storage.handler url secret
 
 -- Storage + Config
 main : '{IO, Exception} ()
-main = do
-  Threads.run do Http.run do
-    handle
-      (handle !myApp with Unex.Storage.handler "http://localhost:4040" "my-secret")
-      with Unex.Config.handler "http://localhost:4040" "my-secret"
+main = Unex.main.withConfig
+  (Optional.getOrElse "http://localhost:4040" (Either.toOptional (catch do IO.getEnv "UNEX_URL")))
+  (Optional.getOrElse "" (Either.toOptional (catch do IO.getEnv "UNEX_SECRET")))
+  myApp
 ```
+
+`Unex.main.withConfig baseUrl secret program` is the escape hatch when you need an explicit URL (e.g. targeting a remote server by name in a deploy script).
 
 ## Part 7: Testing with mock handlers
 
@@ -272,7 +278,56 @@ UNEX_NODE=a UNEX_COOKIE=secret ./bin/unex start
 
 See `config.example.exs` for all options, or use environment variables (documented in README.md).
 
-## Part 9: How it works
+## Part 9: Deploying services
+
+Services are named, long-running Unison programs callable from anywhere in the cluster. Deployment is a two-step process: push bytecode, then name it.
+
+```unison
+myService : '{Unex.Storage, IO, Exception} ()
+myService = do
+  Unex.Storage.createDatabase "svc"
+  Unex.Storage.writeCell "svc" "hits" "0"
+  printLine "Service started"
+
+deployScript : '{Unex.Services, IO, Exception} ()
+deployScript = do
+  -- Step 1: push bytecode and get back its Unison hash
+  hash = Unex.Services.deploy (termLink myService) (toText (termLink myService))
+
+  -- Step 2: create a stable name pointing to that hash
+  Unex.Services.release "my-service" hash
+
+  printLine ("Deployed: " ++ hash)
+
+main : '{IO, Exception} ()
+main = Unex.main deployScript
+```
+
+After deploying, call the service by name from anywhere:
+
+```unison
+callScript : '{Unex.Services, IO, Exception} ()
+callScript = do
+  result = Unex.Services.call "my-service" "{}"
+  printLine result
+
+main : '{IO, Exception} ()
+main = Unex.main callScript
+```
+
+**Releasing a new version** — deploy new bytecode, then release under the same name:
+
+```unison
+releaseScript : '{Unex.Services, IO, Exception} ()
+releaseScript = do
+  hash = Unex.Services.deploy (termLink myServiceV2) (toText (termLink myServiceV2))
+  Unex.Services.release "my-service" hash   -- atomically moves the pointer
+  printLine ("Released v2: " ++ hash)
+```
+
+Because credentials never appear in Unison code, `deployScript` and `callScript` are safe to share on Unison Share. The server's own `UNEX_URL`/`UNEX_SECRET` are injected into the UCM subprocess automatically when a service runs.
+
+## Part 10: How it works
 
 Unex has two layers:
 
@@ -322,8 +377,8 @@ Unex has two layers:
 | `Unex.Scratch` | `put`, `get`, `delete` | ETS |
 | `Unex.Log` | `info`, `error`, `warn`, `recent` | ETS ring buffer |
 | `Unex.Remote` | `execute`, `submit` | BEAM distribution |
-| `Unex.Services` | `deploy`, `call`, `list`, `undeploy` | Registry + Remote |
+| `Unex.Services` | `deploy`, `release`, `call`, `list`, `undeploy` | Registry + Remote |
 
 ## HTTP API reference
 
-All abilities are also available directly via HTTP. See the [README](../README.md) for curl examples covering every endpoint.
+All abilities are also available directly via HTTP. See the [API reference](api.md) for curl examples covering every endpoint.

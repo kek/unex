@@ -1,18 +1,33 @@
 -- Unex Main Combinator
 -- Composes all ability handlers to run a program against a Unex server.
 --
+-- Connection details are read from environment variables:
+--   UNEX_URL    — server base URL (default: http://localhost:4040)
+--   UNEX_SECRET — bearer token    (default: empty string)
+--
 -- Usage:
 --   main : '{IO, Exception} ()
---   main = Unex.main "http://localhost:4040" "my-secret" myApp
+--   main = Unex.main myApp
 --
--- Where myApp uses any combination of Unex.Storage, Unex.Config, Unex.Blobs, Unex.Scratch, Unex.Log, Unex.Remote, Unex.Services.
+-- Where myApp uses any combination of Unex.Storage, Unex.Config, Unex.Blobs,
+-- Unex.Scratch, Unex.Log, Unex.Remote, Unex.Services.
+--
+-- For tests or explicit config:
+--   main = Unex.main.withConfig "http://localhost:4040" "my-secret" myApp
 
 
-Unex.main : Text
+Unex.main : '{Unex.Storage, Unex.Config, Unex.Blobs, Unex.Scratch, Unex.Log, Unex.Remote, Unex.Services, IO, Exception} a
+  -> '{IO, Exception} a
+Unex.main program = do
+  url = Optional.getOrElse "http://localhost:4040" (Either.toOptional (catch do IO.getEnv "UNEX_URL"))
+  secret = Optional.getOrElse "" (Either.toOptional (catch do IO.getEnv "UNEX_SECRET"))
+  !(Unex.main.withConfig url secret program)
+
+Unex.main.withConfig : Text
   -> Text
   -> '{Unex.Storage, Unex.Config, Unex.Blobs, Unex.Scratch, Unex.Log, Unex.Remote, Unex.Services, IO, Exception} a
   -> '{IO, Exception} a
-Unex.main baseUrl secret program = do
+Unex.main.withConfig baseUrl secret program = do
   Threads.run do Http.run do
     handle
       (handle

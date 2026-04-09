@@ -1,6 +1,6 @@
 -- Example: Full application using all abilities via Unex.main
 --
--- Run with: (Unex server must be running on localhost:4040)
+-- Set UNEX_URL and UNEX_SECRET env vars, then run from UCM:
 --   myProject/main> run Examples.FullApp.main
 
 
@@ -34,5 +34,4 @@ Examples.FullApp.app = do
   printLine "All done!"
 
 Examples.FullApp.main : '{IO, Exception} ()
-Examples.FullApp.main =
-  Unex.main "http://localhost:4040" "my-secret" Examples.FullApp.app
+Examples.FullApp.main = Unex.main Examples.FullApp.app

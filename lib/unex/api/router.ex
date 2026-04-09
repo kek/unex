@@ -11,6 +11,7 @@ defmodule Unex.API.Router do
     CellController,
     TransactionController,
     ServicesController,
+    BytecodeController,
     ConfigController,
     BlobsController,
     ScratchController,
@@ -20,7 +21,8 @@ defmodule Unex.API.Router do
 
   plug Plug.Parsers,
     parsers: [:json],
-    json_decoder: Jason
+    json_decoder: Jason,
+    pass: ["application/octet-stream"]
 
   plug Unex.API.Auth
 
@@ -71,10 +73,23 @@ defmodule Unex.API.Router do
     TransactionController.execute(conn, db)
   end
 
+  # Bytecode routes
+  put "/bytecode/:hash" do
+    BytecodeController.put(conn, hash)
+  end
+
+  get "/bytecode/:hash" do
+    BytecodeController.get(conn, hash)
+  end
+
   # Services routes
 
   post "/services/deploy" do
     ServicesController.deploy(conn)
+  end
+
+  post "/services/:name/release" do
+    ServicesController.release(conn, name)
   end
 
   post "/services/:name/call" do

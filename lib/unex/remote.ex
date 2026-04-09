@@ -60,7 +60,8 @@ defmodule Unex.Remote do
          data when is_binary(data) <- Map.get(resolved, hash) do
       try do
         File.write!(path, data)
-        Runner.run_compiled(path, Keyword.take(opts, [:timeout, :args]))
+        env = service_env()
+        Runner.run_compiled(path, Keyword.merge(Keyword.take(opts, [:timeout, :args]), [env: env]))
       after
         File.rm(path)
       end
@@ -68,5 +69,12 @@ defmodule Unex.Remote do
       {:error, _} = err -> err
       nil -> {:error, {:missing, hash}}
     end
+  end
+
+  defp service_env do
+    port = Application.get_env(:unex, :api_port, 4040)
+    url = "http://localhost:#{port}"
+    secret = Application.get_env(:unex, :api_secret, "")
+    [{"UNEX_URL", url}, {"UNEX_SECRET", secret}]
   end
 end

@@ -56,4 +56,17 @@ defmodule Unex.API.ServicesController do
     :ok = Services.undeploy(name)
     Json.send_json(conn, 200, %{status: "ok"})
   end
+
+  def release(conn, name) do
+    {:ok, params} = Json.read_json(conn)
+
+    case params["hash"] do
+      nil ->
+        Json.send_json(conn, 422, %{error: "hash is required"})
+
+      hash ->
+        :ok = Services.release(name, hash)
+        Json.send_json(conn, 200, %{name: name, hash: hash})
+    end
+  end
 end

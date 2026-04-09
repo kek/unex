@@ -1,0 +1,41 @@
+myApp : '{Unex.Storage, IO, Exception} ()
+myApp = do
+  Unex.Storage.createDatabase "mydb"
+  Unex.Storage.createTable "mydb" "users"
+  Unex.Storage.write "mydb" "users" "alice" "role=admin"
+
+  match Unex.Storage.read "mydb" "users" "alice" with
+    Some val -> printLine ("Got: " ++ val)
+    None -> printLine "Not found"
+
+main : '{IO, Exception} ()
+main = Unex.main myApp
+
+
+---
+
+myApp : '{Unex.Storage, IO, Exception} ()
+myApp = do
+  -- Create a database and table
+  Unex.Storage.createDatabase "mydb"
+  Unex.Storage.createTable "mydb" "users"
+
+  -- Write data
+  Unex.Storage.write "mydb" "users" "alice" "role=admin"
+  Unex.Storage.write "mydb" "users" "bob" "role=viewer"
+
+  -- Read it back
+  match Unex.Storage.read "mydb" "users" "alice" with
+    Some val -> printLine ("Alice: " ++ val)
+    None -> printLine "Not found"
+
+  -- Cells: single durable values
+  Unex.Storage.writeCell "mydb" "visitor_count" "42"
+  match Unex.Storage.readCell "mydb" "visitor_count" with
+    Some n -> printLine ("Visitors: " ++ n)
+    None -> printLine "No count"
+
+  printLine "Done!"
+
+main : '{IO, Exception} ()
+main = Unex.main myApp
