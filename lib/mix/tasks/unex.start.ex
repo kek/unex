@@ -67,12 +67,31 @@ defmodule Mix.Tasks.Unex.Start do
   end
 
   defp start_without_distribution do
-    Application.get_env(:unex, :mnesia_dir) |> File.mkdir_p!()
-    Application.get_env(:unex, :blobs_dir) |> File.mkdir_p!()
-    Application.put_env(:unex, :start_api, true)
+    {config, _key_generated?, _secret_generated?} = Unex.ConfigResolver.resolve()
+
+    Application.put_all_env(
+      [
+        unex: [
+          api_port: config.api_port,
+          api_secret: config.api_secret,
+          blobs_dir: config.blobs_dir,
+          config_encryption_key: config.config_encryption_key,
+          cookie: config.cookie,
+          mnesia_dir: config.mnesia_dir,
+          node_name: config.node_name,
+          peers: config.peers,
+          start_api: true,
+          ucm_path: config.ucm_path
+        ]
+      ],
+      persistent: false
+    )
+
+    File.mkdir_p!(config.mnesia_dir)
+    File.mkdir_p!(config.blobs_dir)
     Mix.Task.run("app.start")
 
-    port = Application.get_env(:unex, :api_port, 4040)
+    port = config.api_port
     IO.puts("[unex] API listening on http://localhost:#{port}")
     IO.puts("[unex] Press Ctrl+C to stop")
 

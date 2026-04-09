@@ -6,6 +6,7 @@ defmodule Unex.ConfigResolver do
   defstruct [
     :node_name,
     :cookie,
+    :api_secret,
     :config_encryption_key,
     api_port: 4040,
     data_dir: "./data",
@@ -30,6 +31,7 @@ defmodule Unex.ConfigResolver do
       api_port: parse_int(System.get_env("UNEX_PORT")),
       data_dir: System.get_env("UNEX_DATA"),
       peers: parse_peers(System.get_env("UNEX_PEERS")),
+      api_secret: System.get_env("UNEX_SECRET"),
       config_encryption_key: System.get_env("UNEX_CONFIG_KEY"),
       ucm_path: System.get_env("UCM_PATH")
     }
@@ -83,7 +85,7 @@ defmodule Unex.ConfigResolver do
 
   @doc """
   Full resolution pipeline: defaults -> config file -> env vars -> validate -> derive.
-  Returns `{config, key_generated?}`.
+  Returns `{config, key_generated?, secret_generated?}`.
   """
   def resolve do
     file_config = load_config_file()
@@ -97,7 +99,10 @@ defmodule Unex.ConfigResolver do
       |> validate!()
       |> derive_paths()
 
-    resolve_encryption_key(config)
+    {config, key_generated?} = resolve_encryption_key(config)
+    {config, secret_generated?} = resolve_api_secret(config)
+
+    {config, key_generated?, secret_generated?}
   end
 
   defp load_config_file do
@@ -135,6 +140,15 @@ defmodule Unex.ConfigResolver do
   defp parse_peers(nil), do: nil
   defp parse_peers(""), do: []
   defp parse_peers(str), do: String.split(str, ",", trim: true) |> Enum.map(&String.trim/1)
+
+  defp resolve_api_secret(config) do
+    if config.api_secret do
+      {config, false}
+    else
+      secret = Base.encode64(:crypto.strong_rand_bytes(32))
+      {%{config | api_secret: secret}, true}
+    end
+  end
 
   defp to_map(%__MODULE__{} = s), do: Map.from_struct(s)
   defp to_map(m) when is_map(m), do: m

@@ -15,18 +15,20 @@ myService = do
   Unex.Storage.writeCell "svc" "hits" "0"
   printLine "Service started"
 
--- Wrap with Unex.main so UNEX_URL and UNEX_SECRET are read from env at runtime.
--- This is the term whose bytecode gets pushed — it is self-contained.
+-- Wrap with Unex.main so env-var credentials are baked into the bytecode.
+-- The server runs this term directly with `ucm run.compiled`.
 mainService : '{IO, Exception} ()
 mainService = Unex.main myService
 
 deployScript : '{Unex.Services, IO, Exception} ()
 deployScript = do
-  -- deploy pushes bytecode for mainService and returns its Unison hash
+  -- Step 1: push compiled bytecode and get back its Unison hash
   hash = Unex.Services.deploy "my-service" (termLink mainService)
-  -- release points the name at the hash (or update to a new hash later)
+
+  -- Step 2: create a stable name pointing to that hash
   Unex.Services.release "my-service" hash
+
   printLine ("Deployed: " ++ hash)
 
-mainDeploy : '{IO, Exception} ()
-mainDeploy = Unex.main deployScript
+main : '{IO, Exception} ()
+main = Unex.main deployScript

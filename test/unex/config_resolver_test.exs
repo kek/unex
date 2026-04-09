@@ -11,6 +11,7 @@ defmodule Unex.ConfigResolverTest do
       assert defaults.node_name == nil
       assert defaults.cookie == nil
       assert defaults.peers == []
+      assert defaults.api_secret == nil
       assert defaults.config_encryption_key == nil
       assert defaults.ucm_path == "ucm"
     end
@@ -39,6 +40,14 @@ defmodule Unex.ConfigResolverTest do
 
       env = ConfigResolver.resolve_env()
       assert env.peers == ["b@host1", "c@host2"]
+    end
+
+    test "reads UNEX_SECRET" do
+      System.put_env("UNEX_SECRET", "top-secret")
+      on_exit(fn -> System.delete_env("UNEX_SECRET") end)
+
+      env = ConfigResolver.resolve_env()
+      assert env.api_secret == "top-secret"
     end
 
     test "ignores unset env vars" do
@@ -116,6 +125,35 @@ defmodule Unex.ConfigResolverTest do
       assert is_binary(resolved.config_encryption_key)
       assert byte_size(resolved.config_encryption_key) > 0
       assert generated?
+    end
+  end
+
+  describe "resolve/0" do
+    test "derives startup paths and generates missing secrets" do
+      original_env =
+        for key <- ["UNEX_DATA", "UNEX_SECRET", "UNEX_CONFIG_KEY"], into: %{} do
+          {key, System.get_env(key)}
+        end
+
+      System.put_env("UNEX_DATA", "/tmp/unex-resolve")
+      System.delete_env("UNEX_SECRET")
+      System.delete_env("UNEX_CONFIG_KEY")
+
+      on_exit(fn ->
+        Enum.each(original_env, fn
+          {key, nil} -> System.delete_env(key)
+          {key, value} -> System.put_env(key, value)
+        end)
+      end)
+
+      {resolved, key_generated?, secret_generated?} = ConfigResolver.resolve()
+
+      assert resolved.mnesia_dir == "/tmp/unex-resolve/mnesia"
+      assert resolved.blobs_dir == "/tmp/unex-resolve/blobs"
+      assert is_binary(resolved.config_encryption_key)
+      assert is_binary(resolved.api_secret)
+      assert key_generated?
+      assert secret_generated?
     end
   end
 
