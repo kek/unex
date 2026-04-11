@@ -74,8 +74,8 @@ defmodule Unex.API.Router do
   end
 
   # Bytecode routes
-  post "/bytecode/:hash" do
-    BytecodeController.put(conn, hash)
+  post "/bytecode" do
+    BytecodeController.push(conn)
   end
 
   get "/bytecode/:hash" do

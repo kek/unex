@@ -17,7 +17,8 @@ defmodule Unex.Application do
       Unex.Cluster.SyncServer,
       Unex.Services.Registry,
       Unex.Abilities.Scratch,
-      Unex.Abilities.Log
+      Unex.Abilities.Log,
+      Unex.Executor
     ]
   end
 
