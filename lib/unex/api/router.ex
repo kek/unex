@@ -84,6 +84,10 @@ defmodule Unex.API.Router do
 
   # Services routes
 
+  post "/services/:name/deploy" do
+    ServicesController.deploy(conn, name)
+  end
+
   post "/services/:name/release" do
     ServicesController.release(conn, name)
   end
