@@ -18,7 +18,7 @@ defmodule Unex.Application do
       Unex.Services.Registry,
       Unex.Abilities.Scratch,
       Unex.Abilities.Log,
-      Unex.Executor
+      Unex.Runtime
     ]
   end
 

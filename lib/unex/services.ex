@@ -8,6 +8,7 @@ defmodule Unex.Services do
   alias Unex.Services.Registry
   alias Unex.Services.Registry.Entry
   alias Unex.Remote
+  alias Unex.Cluster.HashCache
 
   @doc """
   Calls a named service by resolving its registry entry and executing its bytecode.
@@ -49,6 +50,25 @@ defmodule Unex.Services do
   @doc "Unregisters a named service."
   def undeploy(name) do
     Registry.unregister(name)
+  end
+
+  @doc """
+  Deploys a service by pulling from Unison Share and compiling.
+
+  The `project` is a Share project reference (e.g., "@myorg/myapp").
+  The `hash` is the Unison hash of the entry point term.
+
+  Returns `{:ok, %Entry{}}` on success.
+  """
+  def deploy(name, project, hash) do
+    case Unex.Runtime.compile(project, hash) do
+      {:ok, uc_bytes} ->
+        storage_hash = Unex.Cluster.HashCache.put(HashCache, uc_bytes)
+        release(name, storage_hash)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
 end

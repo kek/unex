@@ -34,9 +34,7 @@ executor.deserializeCodes pairs =
   match pairs with
     [] -> []
     (link, bytes) +: rest ->
-      match Code.deserialize bytes with
-        Left err -> bug ("executor: Code.deserialize failed: " ++ err)
-        Right code -> (link, code) +: executor.deserializeCodes rest
+      (link, Code.deserialize bytes) +: executor.deserializeCodes rest
 
 executor : '{IO, Exception} ()
 executor = do
@@ -44,7 +42,7 @@ executor = do
     Left _ -> bug "executor: UNEX_BUNDLE env var not set"
     Right p -> p
 
-  bundle = readFileBytes bundlePath
+  bundle = FilePath.readFile (FilePath bundlePath)
 
   -- Parse bundle header
   depsLen = executor.readU32 bundle
@@ -52,9 +50,7 @@ executor = do
   fnBytes = Bytes.drop (4 + depsLen) bundle
 
   -- Load code dependencies (only references builtin types, always loadable)
-  depsVal = match Value.deserialize depsBytes with
-    Left err -> bug ("executor: deps deserialize failed: " ++ err)
-    Right v -> v
+  depsVal = Value.deserialize depsBytes
   codePairs : [(Link.Term, Bytes)]
   codePairs = match Value.load depsVal with
     Left _missing -> bug "executor: deps Value.load failed"
@@ -64,12 +60,10 @@ executor = do
   codeEntries = executor.deserializeCodes codePairs
   _ = Code.cache_ codeEntries
 
-  -- Load and execute the function
-  fnVal = match Value.deserialize fnBytes with
-    Left err -> bug ("executor: function deserialize failed: " ++ err)
-    Right v -> v
-  fn : '{IO, Exception} ()
+  -- Load and execute the function (wrapped with Unex.main to handle abilities)
+  fnVal = Value.deserialize fnBytes
+  fn : '{Unex.Storage, Unex.Config, Unex.Blobs, Unex.Scratch, Unex.Log, Unex.Remote, Unex.Services, IO, Exception} ()
   fn = match Value.load fnVal with
     Left _missing -> bug "executor: function Value.load failed (missing deps after cache)"
     Right f -> f
-  !fn
+  !(Unex.main fn)

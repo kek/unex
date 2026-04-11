@@ -1,10 +1,10 @@
--- Example: Deploy a service using Value+Code serialization.
---
--- Everything in one file — no add, no termLink needed.
+-- Example: Deploy a compiled service.
 --
 -- Workflow from UCM:
 --   1. load test/example/service.u
---   2. run mainDeploy
+--   2. add
+--   3. compile mainService /tmp/svc
+--   4. run mainDeploy
 
 myService : '{Unex.Storage, IO, Exception} ()
 myService = do
@@ -17,7 +17,7 @@ mainService = Unex.main myService
 
 deployScript : '{Unex.Services, IO, Exception} ()
 deployScript = do
-  hash = Unex.Services.deploy "my-service" mainService
+  hash = Unex.Services.deploy "my-service" (FilePath "/tmp/svc.uc")
   Unex.Services.release "my-service" hash
   printLine ("Deployed: " ++ hash)
 
