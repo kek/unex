@@ -1,14 +1,14 @@
 -- Unex Services Ability
 -- Deploy, call, list, undeploy, and release named services.
 --
--- "deploy" takes a FilePath to a compiled .uc file, reads the bytes,
--- and pushes them to the server. The server runs them with ucm run.compiled.
+-- "deploy" takes a Link.Term, sends the hash + Share project to the server.
+-- The server pulls from Share, compiles to .uc, and stores the bytecode.
 -- "release" points a service name at any existing hash (for versioning/rollback).
 
 structural type Unex.ServiceInfo = { name : Text, hash : Text, node : Text }
 
 unique ability Unex.Services where
-  deploy : Text -> FilePath -> Text
+  deploy : Text -> Link.Term -> Text
   release : Text -> Text -> ()
   call : Text -> Text
   list : [Unex.ServiceInfo]
@@ -16,13 +16,19 @@ unique ability Unex.Services where
 
 Unex.Services.handler : Text -> Text -> Request {Unex.Services} a -> {IO, Exception, Http, Threads} a
 Unex.Services.handler baseUrl secret = cases
-  { Unex.Services.deploy name path -> k } ->
-    bytes = FilePath.readFile path
-    resp = Unex.Http.postBytesJson secret (baseUrl ++ "/bytecode") bytes
-    hash = match Unex.Http.extractField (bodyText resp) "hash" with
+  { Unex.Services.deploy name link -> k } ->
+    raw = Link.Term.toText link
+    hash = if Text.take 1 raw == "#" then Text.drop 1 raw else raw
+    project = match catch do IO.getEnv "UNEX_PROJECT" with
+      Left _ -> bug "Unex.Services.deploy: UNEX_PROJECT env var not set"
+      Right p -> p
+    resp = Unex.Http.postJson secret
+      (baseUrl ++ "/services/" ++ name ++ "/deploy")
+      (Unex.Http.toJson [("hash", hash), ("project", project)])
+    deployHash = match Unex.Http.extractField (bodyText resp) "hash" with
       Some h -> h
       None -> bug "Unex.Services.deploy: server did not return hash"
-    handle k hash with Unex.Services.handler baseUrl secret
+    handle k deployHash with Unex.Services.handler baseUrl secret
 
   { Unex.Services.release name hash -> k } ->
     _ = Unex.Http.postJson secret
