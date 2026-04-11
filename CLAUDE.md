@@ -32,7 +32,7 @@ Minimal: Plug (HTTP middleware), Bandit (HTTP server), Jason (JSON). No external
 Always started: `HashCache`, `SyncServer`, `Services.Registry`, `Scratch`, `Log`. Conditionally started: `PeerConnector` (when peers configured), Bandit HTTP server (when `:start_api` is true).
 
 ### Execution flow
-`Unex.eval/2` and `Unex.compile_and_run/2` are the top-level API. Both create an ephemeral `Workspace` (isolated Unison codebase in tmp), then either run source directly via `Runner.run_file` or compile to `.uc` bytecode via `Compiler` first. Bytecode is cached in `HashCache` by SHA256.
+`Unex.eval/2` and `Unex.compile_and_run/2` are the top-level API. Both create an ephemeral `Workspace` (isolated Unison codebase in tmp), then either run source directly via `Runner.run_file` or compile to `.uc` bytecode via `Compiler` first. Bytecode is cached in `HashCache` by SHA256. Deployed services use a different path: the client serializes a Value+Code bundle (Unison Cloud protocol), the server stores it in `HashCache`, and executes via a pre-compiled executor program (`executor.uc`) that loads the bundle at runtime.
 
 ### Storage layer (`lib/unex/storage/`)
 All backed by Mnesia disc copies. `Schema` initializes tables on boot. `Database` is a logical namespace. `OrderedTable` provides sorted key-value (Mnesia ordered_set). `Cell` stores single named values. `Transaction` wraps multiple ops atomically.
@@ -48,6 +48,7 @@ Plug router dispatches to controllers. `Auth` plug enforces bearer token (`Autho
 
 ### Unison ability library (`unison/`)
 `.u` files define abilities and HTTP-backed handlers. All handlers take `baseUrl` and `secret` parameters for authenticated HTTP calls. `Main.u` composes all handlers. `Examples/` has working programs. These files are meant to be copied into Unison projects.
+`Services.u` uses Value+Code serialization for deployment — `Value.value`, `Value.serialize`, `Value.dependencies`, `Code.lookup`, `Code.serialize` — matching Unison Cloud's distributed execution protocol.
 
 ## Configuration
 

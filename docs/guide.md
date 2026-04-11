@@ -280,11 +280,9 @@ See `config.example.exs` for all options, or use environment variables (document
 
 ## Part 9: Deploying services
 
-Services are named, long-running Unison programs callable from anywhere in the cluster. Deployment is a two-step process: push bytecode, then name it.
+Services are named, long-running Unison programs callable from anywhere in the cluster. Deployment uses the same Value + Code serialization protocol as Unison Cloud — pass the function directly, and the platform handles the rest.
 
-`termLink` requires terms to be in the codebase (hashed via `add`), so the service term and the deploy script live in separate files with an `add` in between.
-
-**File 1 — define and add the service** (`test/example/service.u`):
+**Define and deploy — all in one file** (`service.u`):
 
 ```unison
 myService : '{Unex.Storage, IO, Exception} ()
@@ -293,63 +291,126 @@ myService = do
   Unex.Storage.writeCell "svc" "hits" "0"
   printLine "Service started"
 
--- Wrap with Unex.main so env-var credentials are baked into the bytecode.
--- The server runs this term directly with `ucm run.compiled`.
+-- Wrap with Unex.main so the server can inject credentials at runtime
 mainService : '{IO, Exception} ()
 mainService = Unex.main myService
-```
 
-In UCM:
-```
-examples/main> load test/example/service.u
-examples/main> add
-```
-
-**File 2 — deploy** (`test/example/deploy.u`):
-
-```unison
-deployScript : '{Unex.Services, IO, Exception} ()
-deployScript = do
-  -- Push compiled bytecode; returns the Unison hash
-  hash = Unex.Services.deploy "my-service" (termLink mainService)
-  -- Point the name at that hash
+app : '{Unex.Services, IO, Exception} ()
+app = do
+  hash = Unex.Services.deploy "my-service" mainService
   Unex.Services.release "my-service" hash
   printLine ("Deployed: " ++ hash)
 
-mainDeploy : '{IO, Exception} ()
-mainDeploy = Unex.main deployScript
+main : '{IO, Exception} ()
+main = Unex.main app
 ```
 
 In UCM:
 ```
-examples/main> load test/example/deploy.u
-examples/main> run mainDeploy
+myapp/main> load service.u
+myapp/main> run main
 ```
 
-After deploying, call the service by name from anywhere:
+No `add` step. No `termLink`. One file, one load, one run. The `deploy` ability captures the function closure, serializes it with all its code dependencies, and ships it to the server.
+
+**Calling a deployed service:**
 
 ```unison
-callScript : '{Unex.Services, IO, Exception} ()
-callScript = do
+callApp : '{Unex.Services, IO, Exception} ()
+callApp = do
   result = Unex.Services.call "my-service"
   printLine result
 
 main : '{IO, Exception} ()
-main = Unex.main callScript
+main = Unex.main callApp
 ```
 
-**Releasing a new version** — add new service terms, then re-deploy:
+**Releasing a new version** — deploy new code, atomically update the name pointer:
 
 ```unison
--- After `add`ing myServiceV2 and mainServiceV2:
-releaseScript : '{Unex.Services, IO, Exception} ()
-releaseScript = do
-  hash = Unex.Services.deploy "my-service" (termLink mainServiceV2)
-  Unex.Services.release "my-service" hash   -- atomically moves the pointer
+upgradeApp : '{Unex.Services, IO, Exception} ()
+upgradeApp = do
+  hash = Unex.Services.deploy "my-service" mainServiceV2
+  Unex.Services.release "my-service" hash
   printLine ("Released v2: " ++ hash)
 ```
 
-Because credentials never appear in Unison code, `deployScript` and `callScript` are safe to share on Unison Share. The server's own `UNEX_URL`/`UNEX_SECRET` are injected into the UCM subprocess automatically when a service runs.
+**Rollback** — point the name back at any previous hash:
+
+```unison
+rollback : '{Unex.Services, IO, Exception} ()
+rollback = do
+  Unex.Services.release "my-service" previousHash
+```
+
+### How deployment works
+
+Under the hood, `Unex.Services.deploy` uses the same protocol as Unison Cloud for distributing code:
+
+1. `Value.value fn` — captures the runtime closure
+2. `Value.serialize` — serializes it to bytes
+3. `Value.dependencies` → `Code.lookup` → `Code.serialize` — gathers all code dependencies
+4. The bundle (value + code) is pushed to the server via `POST /bytecode`
+5. `release` points the service name at the bundle's content hash
+
+When the service is called, the server runs an executor program that reverses this process: `Code.cache_` loads the dependencies, `Value.load` reconstitutes the function, and it runs with the server's credentials injected via environment variables.
+
+Because credentials never appear in Unison code, all service definitions are safe to share on Unison Share.
+
+### Server setup: executor
+
+The server needs a compiled executor program to run deployed services. On first startup, it attempts to auto-compile from `unison/executor.u`. If auto-compilation fails (e.g., missing UCM or base library), compile manually:
+
+```
+myapp/main> load unison/executor.u
+myapp/main> add
+myapp/main> compile executor data/executor.uc
+```
+
+The executor only needs to be compiled once. The server caches it at `data/executor.uc`.
+
+## Part 11: Publishing @kek/unex updates
+
+When the Unison ability files (`unison/Unex/*.u`, `unison/Main.u`) change, publish a new version of `@kek/unex` to Unison Share.
+
+### Release workflow
+
+1. **Open the library project in UCM:**
+   ```
+   ucm
+   .> project.open kek/unex
+   kek/unex/main>
+   ```
+
+2. **Load changed files and update definitions:**
+   ```
+   kek/unex/main> load unison/Unex/Services.u
+   kek/unex/main> update
+   kek/unex/main> load unison/Main.u
+   kek/unex/main> update
+   ```
+   Repeat for each changed `.u` file. `update` replaces existing definitions.
+
+3. **Verify:**
+   ```
+   kek/unex/main> test
+   ```
+
+4. **Create a release:**
+   ```
+   kek/unex/main> release.draft 0.2.0
+   kek/unex/releases/0.2.0> push
+   ```
+
+5. **Users update:**
+   ```
+   myapp/main> lib.install @kek/unex
+   ```
+
+### When to release
+
+- Ability signature changes (like `deploy` type change) — bump minor version
+- Handler bug fixes — bump patch version
 
 ## Part 10: How it works
 

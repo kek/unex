@@ -154,20 +154,21 @@ curl -s -H "$AUTH" localhost:4040/log/recent/20
 
 ## Bytecode
 
-Push and pull compiled Unison bytecode by Unison hash. Used by the deploy system.
+Push and pull deployment bundles by content hash. Used by the deploy system.
 
 ```bash
-# Push bytecode (raw bytes, keyed by Unison hash)
-curl -s -X PUT localhost:4040/bytecode/abc123def \
+# Push a bundle (hex-encoded in JSON, server computes SHA256 hash)
+curl -s -X POST localhost:4040/bytecode \
   -H "$AUTH" \
-  -H 'Content-Type: application/octet-stream' \
-  --data-binary @myservice.uc
+  -H 'Content-Type: application/json' \
+  -d '{"data":"<hex-encoded-bundle-bytes>"}'
+# Returns: {"hash":"<sha256>"}
 
-# Pull bytecode
-curl -s -H "$AUTH" localhost:4040/bytecode/abc123def --output myservice.uc
+# Pull a bundle by hash
+curl -s -H "$AUTH" localhost:4040/bytecode/<hash> --output bundle.bin
 ```
 
-Hashes may include a leading `#` (Unison format); it is stripped automatically.
+Bundles are created by the `Unex.Services.deploy` ability using Value + Code serialization. You typically don't interact with this endpoint directly.
 
 ## Services
 
