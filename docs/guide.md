@@ -313,7 +313,7 @@ myapp/main> push
 ```unison
 deployScript : '{Unex.Services, IO, Exception} ()
 deployScript = do
-  hash = Unex.Services.deploy "my-service" (termLink mainService)
+  hash = Unex.Services.deploy "my-service" "mainService"
   Unex.Services.release "my-service" hash
   printLine ("Deployed: " ++ hash)
 
@@ -326,7 +326,7 @@ myapp/main> load deploy.u
 myapp/main> run mainDeploy
 ```
 
-The `deploy` ability sends the entry point's Unison hash to the server. The server pulls your project from Share, compiles the entry point to `.uc` bytecode, and stores it. No manual compilation needed.
+The `deploy` ability sends the entry point's function name and your Share project to the server. The server pulls your project from Share, compiles the entry point to `.uc` bytecode, and stores it. No manual compilation needed.
 
 **Calling a deployed service:**
 
@@ -345,7 +345,7 @@ main = Unex.main callScript
 ```unison
 upgradeScript : '{Unex.Services, IO, Exception} ()
 upgradeScript = do
-  hash = Unex.Services.deploy "my-service" (termLink mainServiceV2)
+  hash = Unex.Services.deploy "my-service" "mainServiceV2"
   Unex.Services.release "my-service" hash
   printLine ("Released v2: " ++ hash)
 ```
@@ -360,7 +360,7 @@ rollback = do
 
 ### How deployment works
 
-1. Client sends the entry point's Unison hash + Share project name to `POST /services/:name/deploy`
+1. Client sends the entry point's function name + Share project name to `POST /services/:name/deploy`
 2. Server pulls the project from Unison Share into its persistent codebase
 3. Server compiles the entry point to `.uc` bytecode using `ucm compile`
 4. `.uc` bytes are stored in HashCache by SHA256 hash

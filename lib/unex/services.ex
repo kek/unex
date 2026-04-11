@@ -56,12 +56,12 @@ defmodule Unex.Services do
   Deploys a service by pulling from Unison Share and compiling.
 
   The `project` is a Share project reference (e.g., "@myorg/myapp").
-  The `hash` is the Unison hash of the entry point term.
+  The `entry_point` is the qualified function name (e.g., "mainService").
 
   Returns `{:ok, %Entry{}}` on success.
   """
-  def deploy(name, project, hash) do
-    case Unex.Runtime.compile(project, hash) do
+  def deploy(name, project, entry_point) do
+    case Unex.Runtime.compile(project, entry_point) do
       {:ok, uc_bytes} ->
         storage_hash = Unex.Cluster.HashCache.put(HashCache, uc_bytes)
         release(name, storage_hash)

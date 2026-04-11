@@ -1,51 +1,47 @@
--- Unex Services Ability
--- Deploy, call, list, undeploy, and release named services.
---
--- "deploy" takes a Link.Term, sends the hash + Share project to the server.
--- The server pulls from Share, compiles to .uc, and stores the bytecode.
--- "release" points a service name at any existing hash (for versioning/rollback).
+structural type Unex.ServiceInfo
+  = { name : Text, hash : Text, node : Text }
 
-structural type Unex.ServiceInfo = { name : Text, hash : Text, node : Text }
+ability Unex.Services where
+  call : Text ->{Unex.Services} Text
+  deploy : Text -> Text ->{Unex.Services} Text
+  list : {Unex.Services} [Unex.ServiceInfo]
+  release : Text -> Text ->{Unex.Services} ()
+  undeploy : Text ->{Unex.Services} ()
 
-unique ability Unex.Services where
-  deploy : Text -> Link.Term -> Text
-  release : Text -> Text -> ()
-  call : Text -> Text
-  list : [Unex.ServiceInfo]
-  undeploy : Text -> ()
-
-Unex.Services.handler : Text -> Text -> Request {Unex.Services} a -> {IO, Exception, Http, Threads} a
+Unex.Services.handler :
+  Text -> Text -> Request {Unex.Services} a ->{IO, Exception, Http, Threads} a
 Unex.Services.handler baseUrl secret = cases
-  { Unex.Services.deploy name link -> k } ->
-    raw = Link.Term.toText link
-    hash = if Text.take 1 raw == "#" then Text.drop 1 raw else raw
-    project = match catch do IO.getEnv "UNEX_PROJECT" with
-      Left _ -> bug "Unex.Services.deploy: UNEX_PROJECT env var not set"
+  { Unex.Services.deploy name entryPoint -> k } ->
+    use Text ++
+    project = match catch do getEnv "UNEX_PROJECT" with
+      Left _  -> bug "Unex.Services.deploy: UNEX_PROJECT env var not set"
       Right p -> p
-    resp = Unex.Http.postJson secret
-      (baseUrl ++ "/services/" ++ name ++ "/deploy")
-      (Unex.Http.toJson [("hash", hash), ("project", project)])
-    deployHash = match Unex.Http.extractField (bodyText resp) "hash" with
+    url = baseUrl ++ "/services/" ++ name ++ "/deploy"
+    body = toJson [("entry", entryPoint), ("project", project)]
+    resp = postJson secret url body
+    hash = match extractField (bodyText resp) "hash" with
       Some h -> h
-      None -> bug "Unex.Services.deploy: server did not return hash"
-    handle k deployHash with Unex.Services.handler baseUrl secret
-
+      None   -> bug "Unex.Services.deploy: server did not return hash"
+    handle k hash with Unex.Services.handler baseUrl secret
   { Unex.Services.release name hash -> k } ->
-    _ = Unex.Http.postJson secret
-          (baseUrl ++ "/services/" ++ name ++ "/release")
-          (Unex.Http.toJson [("hash", hash)])
-    handle k () with Unex.Services.handler baseUrl secret
-
+    use Text ++
+    _ =
+      postJson
+        secret
+        (baseUrl ++ "/services/" ++ name ++ "/release")
+        (toJson [("hash", hash)])
+    handle k() with Unex.Services.handler baseUrl secret
   { Unex.Services.call name -> k } ->
-    body = bodyText (Unex.Http.postEmpty secret (baseUrl ++ "/services/" ++ name ++ "/call"))
+    use Text ++
+    body =
+      bodyText (postEmpty secret (baseUrl ++ "/services/" ++ name ++ "/call"))
     handle k body with Unex.Services.handler baseUrl secret
-
   { Unex.Services.list -> k } ->
-    _ = Unex.Http.getJson secret (baseUrl ++ "/services")
+    use Text ++
+    _ = getJson secret (baseUrl ++ "/services")
     handle k [] with Unex.Services.handler baseUrl secret
-
   { Unex.Services.undeploy name -> k } ->
-    _ = Unex.Http.deleteReq secret (baseUrl ++ "/services/" ++ name)
-    handle k () with Unex.Services.handler baseUrl secret
-
+    use Text ++
+    _ = deleteReq secret (baseUrl ++ "/services/" ++ name)
+    handle k() with Unex.Services.handler baseUrl secret
   { a } -> a

@@ -1,6 +1,6 @@
 deployScript : '{Unex.Services, IO, Exception} ()
 deployScript = do
-  hash = Unex.Services.deploy "my-service" (termLink mainService)
+  hash = Unex.Services.deploy "my-service" "mainService"
   Unex.Services.release "my-service" hash
   printLine ("Deployed: " ++ hash)
 

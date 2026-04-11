@@ -168,16 +168,16 @@ curl -s -X POST localhost:4040/bytecode \
 curl -s -H "$AUTH" localhost:4040/bytecode/<hash> --output bundle.bin
 ```
 
-Bundles are created by the `Unex.Services.deploy` ability using Value + Code serialization. You typically don't interact with this endpoint directly.
+You typically don't interact with this endpoint directly — the deploy system uses it internally.
 
 ## Services
 
 ```bash
-# Deploy: register bytecode hash under a name
-curl -s -X POST localhost:4040/services/my-service \
+# Deploy: pull from Share, compile, register
+curl -s -X POST localhost:4040/services/my-service/deploy \
   -H "$AUTH" \
   -H 'Content-Type: application/json' \
-  -d '{"hash":"abc123def"}'
+  -d '{"entry":"mainService","project":"@myorg/myapp"}'
 
 # Release: update the stable name pointer to a new hash
 curl -s -X POST localhost:4040/services/my-service/release \

@@ -27,12 +27,10 @@ defmodule Unex.Runtime do
 
   @impl true
   def init(_opts) do
-    codebase_path = Path.join(data_dir(), "runtime")
-    unison_path = Path.join(codebase_path, ".unison")
+    codebase_path = Path.expand(Path.join(data_dir(), "runtime_codebase"))
 
-    unless File.dir?(unison_path) do
+    unless File.dir?(codebase_path) do
       Logger.info("Runtime: initializing codebase at #{codebase_path}")
-      File.mkdir_p!(codebase_path)
       init_codebase(codebase_path)
     end
 
@@ -46,20 +44,18 @@ defmodule Unex.Runtime do
     {:reply, result, state}
   end
 
-  defp do_compile(codebase_path, project, hash) do
+  defp do_compile(codebase_path, project, entry_point) do
     {:ok, ucm} = Unex.UCM.find()
-    unison_path = Path.join(codebase_path, ".unison")
-    output_path = Path.join(System.tmp_dir!(), "unex_compile_#{hash}")
+    output_path = Path.join(System.tmp_dir!(), "unex_compile_#{:erlang.phash2(entry_point)}")
 
-    commands = "pull #{project} .deployments.h#{hash}\ncompile .deployments.h#{hash} #{output_path}\nexit\n"
+    commands = "pull #{project}\ncompile #{entry_point} #{output_path}\nexit\n"
 
     port =
       Port.open({:spawn_executable, ucm}, [
         :binary,
         :exit_status,
         :stderr_to_stdout,
-        args: ["--codebase", unison_path],
-        cd: codebase_path
+        args: ["--codebase", codebase_path]
       ])
 
     send(port, {self(), {:command, commands}})
@@ -68,30 +64,25 @@ defmodule Unex.Runtime do
     uc_file = output_path <> ".uc"
 
     cond do
-      Unex.UCM.Output.error?(output) ->
-        {:error, output}
-
       File.exists?(uc_file) ->
         bytes = File.read!(uc_file)
         File.rm(uc_file)
         {:ok, bytes}
 
       true ->
-        {:error, "Compilation produced no output. UCM output: #{output}"}
+        {:error, "Compilation failed. UCM output: #{output}"}
     end
   end
 
   defp init_codebase(codebase_path) do
     {:ok, ucm} = Unex.UCM.find()
-    unison_path = Path.join(codebase_path, ".unison")
 
     port =
       Port.open({:spawn_executable, ucm}, [
         :binary,
         :exit_status,
         :stderr_to_stdout,
-        args: ["--codebase-create", unison_path],
-        cd: codebase_path
+        args: ["--codebase-create", codebase_path]
       ])
 
     commands = "project.create runtime\nlib.install @unison/base\nlib.install @unison/http\nlib.install @kek/unex\nexit\n"

@@ -55,17 +55,22 @@ defmodule Unex.API.ServicesController do
   def deploy(conn, name) do
     {:ok, params} = Json.read_json(conn)
 
-    with hash when is_binary(hash) <- params["hash"],
+    require Logger
+
+    with entry_point when is_binary(entry_point) <- params["entry"],
          project when is_binary(project) <- params["project"] do
-      case Services.deploy(name, project, hash) do
+      Logger.info("Deploy #{name}: project=#{project} entry=#{entry_point}")
+
+      case Services.deploy(name, project, entry_point) do
         {:ok, entry} ->
           Json.send_json(conn, 200, %{name: name, hash: entry.hash})
 
         {:error, reason} ->
+          Logger.error("Deploy #{name} failed:\n#{reason}")
           Json.send_json(conn, 500, %{error: inspect(reason)})
       end
     else
-      _ -> Json.send_json(conn, 422, %{error: "hash and project are required"})
+      _ -> Json.send_json(conn, 422, %{error: "entry and project are required"})
     end
   end
 end

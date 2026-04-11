@@ -48,7 +48,7 @@ Plug router dispatches to controllers. `Auth` plug enforces bearer token (`Autho
 
 ### Unison ability library (`unison/`)
 `.u` files define abilities and HTTP-backed handlers. All handlers take `baseUrl` and `secret` parameters for authenticated HTTP calls. `Main.u` composes all handlers. `Examples/` has working programs. These files are meant to be copied into Unison projects.
-`Services.u` uses Value+Code serialization for deployment — `Value.value`, `Value.serialize`, `Value.dependencies`, `Code.lookup`, `Code.serialize` — matching Unison Cloud's distributed execution protocol.
+`Services.u` deploy handler sends the function name + Share project to the server. The server's `Runtime` GenServer pulls from Unison Share, compiles with `ucm compile`, and stores the `.uc` bytecode — matching Unison Cloud's deployment model.
 
 ## Configuration
 
