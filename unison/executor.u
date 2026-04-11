@@ -1,0 +1,75 @@
+-- Unex Executor
+-- Reads a deployment bundle from a file, caches code dependencies,
+-- loads the function value, and executes it.
+--
+-- Bundle format:
+--   [4 bytes: deps section length, big-endian u32]
+--   [deps section: Value.serialize'd [(Link.Term, Bytes)]]
+--   [remaining: Value.serialize'd function closure]
+--
+-- Environment:
+--   UNEX_BUNDLE — path to the bundle file (required)
+--   UNEX_URL    — server URL (passed through to the executed function)
+--   UNEX_SECRET — auth token (passed through to the executed function)
+
+executor.readU32 : Bytes -> Nat
+executor.readU32 bytes =
+  use Nat + *
+  b0 = match Bytes.at 0 bytes with
+    Some n -> n
+    None -> bug "executor: bundle too short for length header"
+  b1 = match Bytes.at 1 bytes with
+    Some n -> n
+    None -> bug "executor: bundle too short for length header"
+  b2 = match Bytes.at 2 bytes with
+    Some n -> n
+    None -> bug "executor: bundle too short for length header"
+  b3 = match Bytes.at 3 bytes with
+    Some n -> n
+    None -> bug "executor: bundle too short for length header"
+  b0 * 16777216 + b1 * 65536 + b2 * 256 + b3
+
+executor.deserializeCodes : [(Link.Term, Bytes)] -> [(Link.Term, Code)]
+executor.deserializeCodes pairs =
+  match pairs with
+    [] -> []
+    (link, bytes) +: rest ->
+      match Code.deserialize bytes with
+        Left err -> bug ("executor: Code.deserialize failed: " ++ err)
+        Right code -> (link, code) +: executor.deserializeCodes rest
+
+executor : '{IO, Exception} ()
+executor = do
+  bundlePath = match catch do IO.getEnv "UNEX_BUNDLE" with
+    Left _ -> bug "executor: UNEX_BUNDLE env var not set"
+    Right p -> p
+
+  bundle = readFileBytes bundlePath
+
+  -- Parse bundle header
+  depsLen = executor.readU32 bundle
+  depsBytes = Bytes.drop 4 bundle |> Bytes.take depsLen
+  fnBytes = Bytes.drop (4 + depsLen) bundle
+
+  -- Load code dependencies (only references builtin types, always loadable)
+  depsVal = match Value.deserialize depsBytes with
+    Left err -> bug ("executor: deps deserialize failed: " ++ err)
+    Right v -> v
+  codePairs : [(Link.Term, Bytes)]
+  codePairs = match Value.load depsVal with
+    Left _missing -> bug "executor: deps Value.load failed"
+    Right pairs -> pairs
+
+  -- Cache all code into the runtime
+  codeEntries = executor.deserializeCodes codePairs
+  _ = Code.cache_ codeEntries
+
+  -- Load and execute the function
+  fnVal = match Value.deserialize fnBytes with
+    Left err -> bug ("executor: function deserialize failed: " ++ err)
+    Right v -> v
+  fn : '{IO, Exception} ()
+  fn = match Value.load fnVal with
+    Left _missing -> bug "executor: function Value.load failed (missing deps after cache)"
+    Right f -> f
+  !fn
