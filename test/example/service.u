@@ -1,13 +1,10 @@
--- Step 1 of 2: Define and add the service terms.
+-- Example: Deploy a service using Value+Code serialization.
 --
--- termLink requires terms to be in the codebase (hashed), so the service
--- must be added before the deploy script can reference it.
+-- Everything in one file — no add, no termLink needed.
 --
 -- Workflow from UCM:
 --   1. load test/example/service.u
---   2. add
---   3. load test/example/deploy.u
---   4. run mainDeploy
+--   2. run mainDeploy
 
 myService : '{Unex.Storage, IO, Exception} ()
 myService = do
@@ -15,7 +12,14 @@ myService = do
   Unex.Storage.writeCell "svc" "hits" "0"
   printLine "Service started"
 
--- Wrap with Unex.main so env-var credentials are baked into the bytecode.
--- The server runs this term directly with `ucm run.compiled`.
 mainService : '{IO, Exception} ()
 mainService = Unex.main myService
+
+deployScript : '{Unex.Services, IO, Exception} ()
+deployScript = do
+  hash = Unex.Services.deploy "my-service" mainService
+  Unex.Services.release "my-service" hash
+  printLine ("Deployed: " ++ hash)
+
+mainDeploy : '{IO, Exception} ()
+mainDeploy = Unex.main deployScript
