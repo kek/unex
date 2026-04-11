@@ -54,18 +54,20 @@ defmodule Unex.Remote do
   Public because it is called via RPC from remote nodes.
   """
   def do_execute(hash, opts \\ []) do
-    path = Path.join(System.tmp_dir!(), "unex_exec_#{hash}.uc")
+    bundle_path = Path.join(System.tmp_dir!(), "unex_bundle_#{hash}.bin")
 
-    with {:ok, resolved} <- SyncServer.resolve([hash]),
+    with {:ok, executor_path} <- Unex.Executor.executor_path(),
+         {:ok, resolved} <- SyncServer.resolve([hash]),
          data when is_binary(data) <- Map.get(resolved, hash) do
       try do
-        File.write!(path, data)
-        env = service_env()
-        Runner.run_compiled(path, Keyword.merge(Keyword.take(opts, [:timeout, :args]), [env: env]))
+        File.write!(bundle_path, data)
+        env = service_env() ++ [{"UNEX_BUNDLE", bundle_path}]
+        Runner.run_compiled(executor_path, Keyword.merge(Keyword.take(opts, [:timeout, :args]), env: env))
       after
-        File.rm(path)
+        File.rm(bundle_path)
       end
     else
+      {:error, :not_compiled} -> {:error, :executor_not_available}
       {:error, _} = err -> err
       nil -> {:error, {:missing, hash}}
     end

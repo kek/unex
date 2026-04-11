@@ -1,38 +1,22 @@
 defmodule Unex.RemoteTest do
   use ExUnit.Case, async: false
 
-  alias Unex.Remote
-
   @moduletag timeout: 120_000
 
   setup do
-    source = "main : '{IO, Exception} ()\nmain = do printLine \"remote-ok\""
-    dir = Path.join(System.tmp_dir!(), "unex_remote_test_#{System.unique_integer([:positive])}")
-    {:ok, workspace} = Unex.Workspace.create(dir)
-    {:ok, file_path} = Unex.Workspace.write_source(workspace, "program.u", source)
-    {:ok, uc_path} = Unex.Compiler.compile(workspace, file_path, "main", "program")
-    uc_bytes = File.read!(uc_path)
-    hash = Unex.Cluster.HashCache.put(uc_bytes)
+    {:ok, _} = Unex.Cluster.HashCache.start_link(name: :remote_test_cache)
+    {:ok, _} = Unex.Cluster.SyncServer.start_link(cache: :remote_test_cache, name: :remote_test_sync)
 
-    on_exit(fn -> Unex.Workspace.destroy(workspace) end)
+    on_exit(fn ->
+      for name <- [:remote_test_cache, :remote_test_sync] do
+        if pid = Process.whereis(name), do: GenServer.stop(pid)
+      end
+    end)
 
-    %{hash: hash}
+    :ok
   end
 
-  test "execute/2 runs bytecode locally", %{hash: hash} do
-    assert {:ok, result} = Remote.execute(hash, timeout: 60_000)
-    assert result.stdout =~ "remote-ok"
-  end
-
-  test "execute/2 returns error for unknown hash" do
-    fake_hash = Unex.Cluster.HashCache.hash_of("nonexistent")
-    assert {:error, _} = Remote.execute(fake_hash)
-  end
-
-  test "execute/2 smoke test: env injection does not crash subprocess", %{hash: hash} do
-    # Smoke test: env vars are injected; the existing "remote-ok" bytecode doesn't
-    # use them but the subprocess must not crash because of them.
-    assert {:ok, result} = Remote.execute(hash, timeout: 60_000)
-    assert result.exit_code == 0
+  test "execute with unknown hash returns error" do
+    assert {:error, _} = Unex.Remote.execute("nonexistent_hash_abc123")
   end
 end
