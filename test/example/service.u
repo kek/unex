@@ -11,7 +11,7 @@ myService : '{Unex.Storage, IO, Exception} ()
 myService = do
   Unex.Storage.createDatabase "svc"
   Unex.Storage.writeCell "svc" "hits" "0"
-  printLine "Service started"
+  printLine "Service started!"
 
 mainService : '{IO, Exception} ()
 mainService = Unex.main myService
