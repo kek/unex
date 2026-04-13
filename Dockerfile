@@ -55,8 +55,8 @@ RUN case "${TARGETARCH}" in \
     rm /tmp/ucm.tar.gz && \
     ucm version
 
-# Create app user
-RUN groupadd --system unex && useradd --system unex -g unex
+# Create app user with home directory (UCM needs writable $HOME for cache)
+RUN groupadd --system unex && useradd --system unex -g unex -m
 
 # Copy release and healthcheck
 COPY --from=build /app/_build/prod/rel/unex /app
