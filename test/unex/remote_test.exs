@@ -5,11 +5,17 @@ defmodule Unex.RemoteTest do
 
   setup do
     {:ok, _} = Unex.Cluster.HashCache.start_link(name: :remote_test_cache)
-    {:ok, _} = Unex.Cluster.SyncServer.start_link(cache: :remote_test_cache, name: :remote_test_sync)
+
+    {:ok, _} =
+      Unex.Cluster.SyncServer.start_link(cache: :remote_test_cache, name: :remote_test_sync)
 
     on_exit(fn ->
       for name <- [:remote_test_cache, :remote_test_sync] do
-        if pid = Process.whereis(name), do: GenServer.stop(pid)
+        try do
+          if pid = Process.whereis(name), do: GenServer.stop(pid)
+        catch
+          :exit, _ -> :ok
+        end
       end
     end)
 
