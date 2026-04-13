@@ -22,7 +22,7 @@ jobs:
           rm ucm.tar.gz
           ucm version
       - run: mix deps.get
-      - run: mix test --exclude integration
+      - run: mix test test/unex
 
   push:
     needs: test
