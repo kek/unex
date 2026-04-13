@@ -16,8 +16,9 @@ jobs:
       - name: Install UCM
         run: |
           curl -fsSL "https://github.com/unisonweb/unison/releases/download/release%2F1.1.1/ucm-linux-arm64.tar.gz" -o ucm.tar.gz
-          tar -xzf ucm.tar.gz
-          sudo mv ucm /usr/local/bin/ucm
+          sudo mkdir -p /usr/local/lib/ucm
+          sudo tar -xzf ucm.tar.gz -C /usr/local/lib/ucm
+          sudo ln -sf /usr/local/lib/ucm/ucm /usr/local/bin/ucm
           rm ucm.tar.gz
           ucm version
       - run: mix deps.get

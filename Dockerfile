@@ -49,7 +49,9 @@ RUN case "${TARGETARCH}" in \
       *) echo "Unsupported arch: ${TARGETARCH}" && exit 1 ;; \
     esac && \
     wget -q "https://github.com/unisonweb/unison/releases/download/release%2F1.1.1/ucm-linux-${UCM_ARCH}.tar.gz" -O /tmp/ucm.tar.gz && \
-    tar -xzf /tmp/ucm.tar.gz -C /usr/local/bin && \
+    mkdir -p /usr/local/lib/ucm && \
+    tar -xzf /tmp/ucm.tar.gz -C /usr/local/lib/ucm && \
+    ln -sf /usr/local/lib/ucm/ucm /usr/local/bin/ucm && \
     rm /tmp/ucm.tar.gz && \
     ucm version
 
