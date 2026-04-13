@@ -185,11 +185,14 @@ curl -s -X POST localhost:4040/services/my-service/release \
   -H 'Content-Type: application/json' \
   -d '{"hash":"def456ghi"}'
 
-# Call a service
+# Call a service (JSON response)
 curl -s -X POST localhost:4040/services/my-service/call \
   -H "$AUTH" \
   -H 'Content-Type: application/json' \
   -d '"{}"'
+
+# Web: serve stdout as HTML (no auth required, browser-friendly)
+curl localhost:4040/services/my-service/web
 
 # List deployed services
 curl -s -H "$AUTH" localhost:4040/services

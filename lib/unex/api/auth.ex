@@ -9,7 +9,13 @@ defmodule Unex.API.Auth do
 
   def call(%{request_path: "/health"} = conn, _opts), do: conn
 
-  def call(conn, _opts) do
+  def call(%{request_path: "/services/" <> rest, method: "GET"} = conn, _opts) do
+    if String.ends_with?(rest, "/web"), do: conn, else: call_auth(conn)
+  end
+
+  def call(conn, _opts), do: call_auth(conn)
+
+  defp call_auth(conn) do
     secret = Application.get_env(:unex, :api_secret)
 
     case get_req_header(conn, "authorization") do

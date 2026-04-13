@@ -1,0 +1,30 @@
+-- Visitor counter web service.
+--
+-- Workflow:
+--   1. load test/example/counter.u
+--   2. add
+--   3. push
+--   4. load test/example/deploy-counter.u
+--   5. run mainDeploy
+--   6. Open http://localhost:4040/services/counter/web in a browser
+
+counter : '{Unex.Storage, IO, Exception} ()
+counter = do
+  Unex.Storage.createDatabase "counter"
+  current = match Unex.Storage.readCell "counter" "hits" with
+    Some n -> Optional.getOrElse 0 (Nat.fromText n)
+    None -> 0
+  new = current + 1
+  Unex.Storage.writeCell "counter" "hits" (Nat.toText new)
+  printLine (counter.html new)
+
+counter.html : Nat -> Text
+counter.html n =
+  use Text ++
+  "<!DOCTYPE html><html><body style='font-family:system-ui;text-align:center;padding:4em'>"
+    ++ "<h1>Visitor #" ++ Nat.toText n ++ "</h1>"
+    ++ "<p>Powered by Unex</p>"
+    ++ "</body></html>"
+
+mainCounter : '{IO, Exception} ()
+mainCounter = Unex.main counter

@@ -52,6 +52,21 @@ defmodule Unex.API.ServicesController do
     end
   end
 
+  def web(conn, name) do
+    case Services.call(name) do
+      {:ok, result} ->
+        conn
+        |> Plug.Conn.put_resp_content_type("text/html")
+        |> Plug.Conn.send_resp(200, result.stdout)
+
+      {:error, :not_found} ->
+        conn |> Plug.Conn.send_resp(404, "Service not found")
+
+      {:error, _reason} ->
+        conn |> Plug.Conn.send_resp(500, "Internal error")
+    end
+  end
+
   def deploy(conn, name) do
     {:ok, params} = Json.read_json(conn)
 

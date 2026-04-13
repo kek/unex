@@ -1,0 +1,8 @@
+deployCounter : '{Unex.Services, IO, Exception} ()
+deployCounter = do
+  hash = Unex.Services.deploy "counter" "mainCounter"
+  Unex.Services.release "counter" hash
+  printLine ("Deployed counter: " ++ hash)
+
+mainDeploy : '{IO, Exception} ()
+mainDeploy = Unex.main deployCounter
