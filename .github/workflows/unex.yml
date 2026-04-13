@@ -13,6 +13,13 @@ jobs:
         with:
           otp-version: "27"
           elixir-version: "1.17"
+      - name: Install UCM
+        run: |
+          curl -fsSL "https://github.com/unisonweb/unison/releases/download/release%2F1.1.1/ucm-linux-arm64.tar.gz" -o ucm.tar.gz
+          tar -xzf ucm.tar.gz
+          sudo mv ucm /usr/local/bin/ucm
+          rm ucm.tar.gz
+          ucm version
       - run: mix deps.get
       - run: mix test
 
