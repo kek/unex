@@ -65,8 +65,12 @@ Unex.Dispatcher.fetchCode :
   Text -> Text -> Link.Term ->{IO, Exception, Http, Threads} Code
 Unex.Dispatcher.fetchCode baseUrl secret t =
   url  = baseUrl Text.++ "/code/" Text.++ Unex.Dispatcher.termHash t
+  Unex.Dispatcher.logLine ("dispatcher: GET " Text.++ url)
   req  = Unex.Http.authHeader secret (HttpRequest.get (URI.parse url))
   resp = Http.request req
+  status = code (HttpResponse.status resp)
+  Unex.Dispatcher.logLine
+    ("dispatcher:   <- " Text.++ Nat.toText status)
   body = Body.toBytes (HttpResponse.body resp)
   Code.deserialize body
 
@@ -121,16 +125,21 @@ Unex.Dispatcher.loop baseUrl secret =
     Some lenBytes ->
       lenOpt = Abort.toOptional! do Nat.fromBytesBigEndian lenBytes
       len    = Optional.getOrElse 0 lenOpt
+      Unex.Dispatcher.logLine
+        ("dispatcher: got frame, len=" Text.++ Nat.toText len)
       match Unex.Dispatcher.readExact len with
         None ->
           Unex.Dispatcher.logLine
             ("dispatcher: short read expecting " Text.++ Nat.toText len Text.++ " body bytes")
         Some payload ->
+          Unex.Dispatcher.logLine "dispatcher: evaluating..."
           response =
             catch do Unex.Dispatcher.handleOne baseUrl secret payload
           respBytes = match response with
             Right bs -> bs
             Left f   -> Unex.Dispatcher.err (Failure.message f)
+          Unex.Dispatcher.logLine
+            ("dispatcher: response, len=" Text.++ Nat.toText (Bytes.size respBytes))
           Unex.Dispatcher.writeFrame respBytes
           Unex.Dispatcher.loop baseUrl secret
 

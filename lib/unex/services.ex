@@ -49,7 +49,7 @@ defmodule Unex.Services do
   def eval_local(hash, timeout) do
     with {:ok, resolved} <- SyncServer.resolve([hash]),
          data when is_binary(data) <- Map.get(resolved, hash) do
-      case Unex.Dispatcher.eval(data, timeout) do
+      case Unex.Dispatcher.eval(Unex.Dispatcher, data, timeout) do
         {:ok, text} -> {:ok, %Result{stdout: text, stderr: "", exit_code: 0}}
         {:error, reason} -> {:error, reason}
       end

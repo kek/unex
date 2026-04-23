@@ -142,6 +142,13 @@ defmodule Unex.Runtime do
                 {term_text, File.read!(Path.join(out_dir, fname))}
               end)
 
+            manifest_path = Path.join(out_dir, "manifest.txt")
+            manifest = if File.exists?(manifest_path), do: File.read!(manifest_path), else: ""
+
+            Logger.info(
+              "Runtime.extract: walked #{length(String.split(manifest, "\n", trim: true))} terms, wrote #{map_size(codes)} codes"
+            )
+
             {:ok, %{root_value: root_value, codes: codes}}
           else
             {:error, "extraction failed. UCM output:\n#{output}"}
@@ -154,24 +161,44 @@ defmodule Unex.Runtime do
 
   defp extractor_source(entry_point, out_dir) do
     """
+    -- Terms whose Link.Term.toText begins with `##` are Unison runtime
+    -- builtins (e.g. `##Nat.+`, `##IO.getEnv.impl.v1`). Their Code cannot be
+    -- serialized via Code.serialize_v3 ("putFunc: could not serialize foreign
+    -- operation: ..."), and there's no need to — the dispatcher runtime
+    -- already has them baked in. Skip them.
+    Unex.Extract.isBuiltin : Link.Term -> Boolean
+    Unex.Extract.isBuiltin t =
+      Text.take 2 (Link.Term.toText t) == "##"
+
+    Unex.Extract.trySerialize : Code ->{IO} Optional Bytes
+    Unex.Extract.trySerialize code =
+      match catch '(Code.serialize_v3 code) with
+        Right bs -> Some bs
+        Left _   -> None
+
     Unex.Extract.walk : [Link.Term] -> [Link.Term] ->{IO, Exception} [Link.Term]
     Unex.Extract.walk seen frontier = match frontier with
       []      -> seen
       t +: ts ->
         if List.contains t seen then Unex.Extract.walk seen ts
+        else if Unex.Extract.isBuiltin t then Unex.Extract.walk (t +: seen) ts
         else match Code.lookup t with
           None      -> Unex.Extract.walk (t +: seen) ts
           Some code ->
-            path = FilePath ("#{out_dir}/" Text.++ Link.Term.toText t Text.++ ".code")
-            FilePath.writeFile path (Code.serialize_v3 code)
-            Unex.Extract.walk (t +: seen) (ts List.++ Code.dependencies code)
+            match Unex.Extract.trySerialize code with
+              None -> Unex.Extract.walk (t +: seen) (ts List.++ Code.dependencies code)
+              Some bs ->
+                path = FilePath ("#{out_dir}/" Text.++ Link.Term.toText t Text.++ ".code")
+                FilePath.writeFile path bs
+                Unex.Extract.walk (t +: seen) (ts List.++ Code.dependencies code)
 
     Unex.Extract.main : '{IO, Exception} ()
     Unex.Extract.main = do
       v = Value.value #{entry_point}
       FilePath.writeFile (FilePath "#{out_dir}/root.value") (Value.serialize_v4 v)
-      _ = Unex.Extract.walk [] (Value.dependencies v)
-      ()
+      seen = Unex.Extract.walk [] (Value.dependencies v)
+      manifest = Text.join "\\n" (List.map Link.Term.toText seen)
+      FilePath.writeFileUtf8 (FilePath "#{out_dir}/manifest.txt") manifest
     """
   end
 
