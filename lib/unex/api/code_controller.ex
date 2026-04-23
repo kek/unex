@@ -9,17 +9,19 @@ defmodule Unex.API.CodeController do
   Stored in the cluster's shared `HashCache`.
   """
 
-  alias Unex.Cluster.HashCache
+  alias Unex.Cluster.SyncServer
   alias Unex.API.Json
 
   def get(conn, term_hash) do
-    case HashCache.get(HashCache, normalize(term_hash)) do
-      {:ok, bytes} ->
+    key = normalize(term_hash)
+
+    case SyncServer.resolve([key]) do
+      {:ok, %{} = found} when is_map_key(found, key) ->
         conn
         |> Plug.Conn.put_resp_content_type("application/octet-stream")
-        |> Plug.Conn.send_resp(200, bytes)
+        |> Plug.Conn.send_resp(200, Map.fetch!(found, key))
 
-      :not_found ->
+      _ ->
         Json.send_json(conn, 404, %{error: "not_found"})
     end
   end
