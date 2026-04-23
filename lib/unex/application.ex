@@ -12,7 +12,7 @@ defmodule Unex.Application do
   end
 
   defp cluster_children do
-    [
+    base = [
       Unex.Cluster.HashCache,
       Unex.Cluster.SyncServer,
       Unex.Services.Registry,
@@ -20,6 +20,12 @@ defmodule Unex.Application do
       Unex.Abilities.Log,
       Unex.Runtime
     ]
+
+    if Application.get_env(:unex, :start_dispatcher, true) do
+      base ++ [Unex.Dispatcher]
+    else
+      base
+    end
   end
 
   defp peer_children do

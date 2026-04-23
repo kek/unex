@@ -12,6 +12,7 @@ defmodule Unex.API.Router do
     TransactionController,
     ServicesController,
     BytecodeController,
+    CodeController,
     ConfigController,
     BlobsController,
     ScratchController,
@@ -19,15 +20,16 @@ defmodule Unex.API.Router do
     Json
   }
 
-  plug Plug.Parsers,
+  plug(Plug.Parsers,
     parsers: [:json],
     json_decoder: Jason,
     pass: ["application/octet-stream"]
+  )
 
-  plug Unex.API.Auth
+  plug(Unex.API.Auth)
 
-  plug :match
-  plug :dispatch
+  plug(:match)
+  plug(:dispatch)
 
   get "/health" do
     Json.send_json(conn, 200, %{status: "ok"})
@@ -80,6 +82,11 @@ defmodule Unex.API.Router do
 
   get "/bytecode/:hash" do
     BytecodeController.get(conn, hash)
+  end
+
+  # Unison Code bytes keyed by Link.Term hash (served to the dispatcher).
+  get "/code/:termhash" do
+    CodeController.get(conn, termhash)
   end
 
   # Services routes

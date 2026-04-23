@@ -1,0 +1,144 @@
+-- Unex Dispatcher
+--
+-- A long-running Unison program that receives serialized Value thunks on stdin,
+-- evaluates them, and writes results to stdout. Missing code dependencies are
+-- fetched from the Unex server via HTTP using the Unex.Code ability, so UCM
+-- only needs to be started once per dispatcher — not once per service call.
+--
+-- Wire format (request, stdin):
+--   [len:8 BE][value_bytes]
+--   where value_bytes is Value.serialize_v4 of a thunk '{IO, Exception} Text.
+--
+-- Wire format (response, stdout):
+--   [len:8 BE][status:1][payload]
+--     status 0x00 = OK, payload is UTF-8 result Text
+--     status 0xFF = error, payload is UTF-8 error message
+--
+-- Logs are written to stderr so they don't pollute the protocol stream.
+--
+-- Missing-code fetch: when Value.load reports missing Link.Terms, the dispatcher
+-- issues `GET $UNEX_URL/code/{termText}` (URL-encoding the '#' prefix) using
+-- the `Authorization: Bearer $UNEX_SECRET` header. The response body is raw
+-- Code.serialize_v3 bytes. The dispatcher accumulates pairs and retries
+-- Code.cache_ atomically until the returned missing list is empty.
+
+
+Unex.Dispatcher.logLine : Text ->{IO, Exception} ()
+Unex.Dispatcher.logLine msg =
+  Handle.putBytes Handle.stdErr (Text.toUtf8 (msg Text.++ "\n"))
+
+-- Read exactly n bytes from stdin. Returns None on EOF before n bytes.
+Unex.Dispatcher.readExact : Nat ->{IO, Exception} Optional Bytes
+Unex.Dispatcher.readExact n =
+  chunk = Handle.getBytes Handle.stdIn n
+  if Bytes.size chunk == n then Some chunk
+  else if Bytes.size chunk == 0 then None
+  else
+    -- partial read (shouldn't happen with getBytes per doc; guard anyway)
+    rest = Unex.Dispatcher.readExact (n - Bytes.size chunk)
+    match rest with
+      None    -> None
+      Some bs -> Some (chunk Bytes.++ bs)
+
+-- Write a length-prefixed frame to stdout and flush.
+Unex.Dispatcher.writeFrame : Bytes ->{IO, Exception} ()
+Unex.Dispatcher.writeFrame payload =
+  use Bytes ++
+  lenBytes = Nat.toBytesBigEndian (Bytes.size payload)
+  Handle.putBytes Handle.stdOut (lenBytes ++ payload)
+
+Unex.Dispatcher.ok : Bytes -> Bytes
+Unex.Dispatcher.ok body = Bytes.fromList [0] Bytes.++ body
+
+Unex.Dispatcher.err : Text -> Bytes
+Unex.Dispatcher.err msg = Bytes.fromList [255] Bytes.++ Text.toUtf8 msg
+
+-- Fetch Code bytes for a single Link.Term from the Unex server.
+-- Link.Term.toText produces "#<hash>"; strip the leading '#' for the URL path
+-- since '#' is a fragment separator in URIs.
+Unex.Dispatcher.termHash : Link.Term -> Text
+Unex.Dispatcher.termHash t =
+  full = Link.Term.toText t
+  if Text.take 1 full == "#" then Text.drop 1 full else full
+
+Unex.Dispatcher.fetchCode :
+  Text -> Text -> Link.Term ->{IO, Exception, Http, Threads} Code
+Unex.Dispatcher.fetchCode baseUrl secret t =
+  url  = baseUrl Text.++ "/code/" Text.++ Unex.Dispatcher.termHash t
+  req  = Unex.Http.authHeader secret (HttpRequest.get (URI.parse url))
+  resp = Http.request req
+  body = Body.toBytes (HttpResponse.body resp)
+  Code.deserialize body
+
+-- Repeatedly fetch + Code.cache_ until the cache has everything Value.load needs.
+Unex.Dispatcher.satisfy :
+  Text -> Text -> [(Link.Term, Code)] -> [Link.Term]
+  ->{IO, Exception, Http, Threads} ()
+Unex.Dispatcher.satisfy baseUrl secret acc needed = match needed with
+  [] ->
+    stillMissing = Code.cache_ acc
+    if List.isEmpty stillMissing then ()
+    else Unex.Dispatcher.satisfy baseUrl secret acc stillMissing
+  _  ->
+    newPairs     =
+      List.map (t -> (t, Unex.Dispatcher.fetchCode baseUrl secret t)) needed
+    acc'         = acc List.++ newPairs
+    stillMissing = Code.cache_ acc'
+    if List.isEmpty stillMissing then ()
+    else Unex.Dispatcher.satisfy baseUrl secret acc' stillMissing
+
+-- Evaluate one request. Returns the bytes to write as the response payload
+-- (already tagged with status byte).
+Unex.Dispatcher.handleOne :
+  Text -> Text -> Bytes ->{IO, Exception, Http, Threads} Bytes
+Unex.Dispatcher.handleOne baseUrl secret valueBytes =
+  v = Value.deserialize valueBytes
+  loaded : Either [Link.Term] ('{IO, Exception} Text)
+  loaded = Value.load v
+  match loaded with
+    Right thunk ->
+      result = !thunk
+      Unex.Dispatcher.ok (Text.toUtf8 result)
+    Left missing ->
+      Unex.Dispatcher.satisfy baseUrl secret [] missing
+      retry : Either [Link.Term] ('{IO, Exception} Text)
+      retry = Value.load v
+      match retry with
+        Right thunk2 ->
+          result = !thunk2
+          Unex.Dispatcher.ok (Text.toUtf8 result)
+        Left stillMissing ->
+          Unex.Dispatcher.err
+            ("Value.load still missing "
+              Text.++ Nat.toText (List.size stillMissing) Text.++ " after fetch")
+
+-- Main request loop. Reads frames from stdin until EOF.
+Unex.Dispatcher.loop :
+  Text -> Text ->{IO, Exception, Http, Threads} ()
+Unex.Dispatcher.loop baseUrl secret =
+  match Unex.Dispatcher.readExact 8 with
+    None          -> Unex.Dispatcher.logLine "dispatcher: stdin EOF, exiting"
+    Some lenBytes ->
+      lenOpt = Abort.toOptional! do Nat.fromBytesBigEndian lenBytes
+      len    = Optional.getOrElse 0 lenOpt
+      match Unex.Dispatcher.readExact len with
+        None ->
+          Unex.Dispatcher.logLine
+            ("dispatcher: short read expecting " Text.++ Nat.toText len Text.++ " body bytes")
+        Some payload ->
+          response =
+            catch do Unex.Dispatcher.handleOne baseUrl secret payload
+          respBytes = match response with
+            Right bs -> bs
+            Left f   -> Unex.Dispatcher.err (Failure.message f)
+          Unex.Dispatcher.writeFrame respBytes
+          Unex.Dispatcher.loop baseUrl secret
+
+Unex.Dispatcher.main : '{IO, Exception} ()
+Unex.Dispatcher.main = do
+  url    = Optional.getOrElse "http://localhost:4040" (Either.toOptional (catch do IO.getEnv "UNEX_URL"))
+  secret = Optional.getOrElse "" (Either.toOptional (catch do IO.getEnv "UNEX_SECRET"))
+  Unex.Dispatcher.logLine ("dispatcher: booting, server=" Text.++ url)
+  Threads.run do
+    Http.run do
+      Unex.Dispatcher.loop url secret
