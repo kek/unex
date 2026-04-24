@@ -99,14 +99,21 @@ defmodule Unex.Services do
   """
   def deploy(name, project, entry_point) do
     case Unex.Runtime.extract(project, entry_point) do
-      {:ok, %{root_value: root_value, codes: codes}} ->
+      {:ok, %{root_value: root_value, codes: codes} = extract} ->
         store_codes(codes)
         root_hash = HashCache.put(HashCache, root_value)
+        maybe_cache_source(root_hash, Map.get(extract, :source))
         release(name, root_hash, project: project, entry_point: entry_point)
 
       {:error, reason} ->
         {:error, reason}
     end
+  end
+
+  defp maybe_cache_source(_hash, nil), do: :ok
+
+  defp maybe_cache_source(hash, source) when is_binary(source) do
+    Unex.Cluster.SourceCache.put(hash, source)
   end
 
   defp store_codes(codes) do

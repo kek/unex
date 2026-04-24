@@ -24,6 +24,7 @@ defmodule Unex.Application do
   defp cluster_children do
     base = [
       Unex.Cluster.HashCache,
+      Unex.Cluster.SourceCache,
       Unex.Cluster.SyncServer,
       Unex.Services.Registry,
       Unex.Abilities.Scratch,

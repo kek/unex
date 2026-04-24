@@ -3,6 +3,7 @@ defmodule Unex.Dashboard.Pages.Hash do
   use Phoenix.LiveDashboard.PageBuilder
 
   alias Unex.Cluster.HashCache
+  alias Unex.Cluster.SourceCache
   alias Unex.Services.Registry
 
   @impl true
@@ -20,6 +21,7 @@ defmodule Unex.Dashboard.Pages.Hash do
       |> Map.put(:result, lookup(id))
       |> Map.put(:hash, id)
       |> Map.put(:source_link, source_link_for(id))
+      |> Map.put(:cached_source, cached_source_for(id))
 
     ~H"""
     <.card :if={is_nil(@hash)} title="Hash inspector">
@@ -43,6 +45,10 @@ defmodule Unex.Dashboard.Pages.Hash do
           View on {@source_link.host} ↗
         </a>
       </p>
+    </.card>
+
+    <.card :if={@cached_source} title="Source (cached from UCM)">
+      <pre style="white-space: pre-wrap; word-break: break-word;"><%= @cached_source %></pre>
     </.card>
 
     <.card :if={@result == :missing and not is_nil(@hash)} title="Blob">
@@ -78,6 +84,21 @@ defmodule Unex.Dashboard.Pages.Hash do
       nil -> nil
       %{project: project, entry_point: entry} -> Unex.Dashboard.SourceLink.build(project, entry)
     end
+  end
+
+  defp cached_source_for(nil), do: nil
+
+  defp cached_source_for(id) do
+    case safe_source_get(id) do
+      {:ok, source} -> source
+      :not_found -> nil
+    end
+  end
+
+  defp safe_source_get(id) do
+    SourceCache.get(id)
+  catch
+    :exit, _ -> :not_found
   end
 
   defp find_service_by_hash(hash) do

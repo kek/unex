@@ -114,6 +114,7 @@ defmodule Unex.Runtime do
           "pull #{project}\n" <>
             "load #{extractor_path}\n" <>
             "run Unex.Extract.main\n" <>
+            "view #{entry_point}\n" <>
             "exit\n"
 
         port =
@@ -149,7 +150,9 @@ defmodule Unex.Runtime do
               "Runtime.extract: walked #{length(String.split(manifest, "\n", trim: true))} terms, wrote #{map_size(codes)} codes"
             )
 
-            {:ok, %{root_value: root_value, codes: codes}}
+            source = parse_view_output(output, entry_point)
+
+            {:ok, %{root_value: root_value, codes: codes, source: source}}
           else
             {:error, "extraction failed. UCM output:\n#{output}"}
           end
@@ -157,6 +160,61 @@ defmodule Unex.Runtime do
           File.rm_rf!(out_dir)
         end
     end
+  end
+
+  @doc false
+  # Parses UCM stdout to extract the pretty-printed source body produced
+  # by `view <entry_point>`. UCM echoes each command with a prompt prefix
+  # (typically `.> ` or similar project-qualified forms like `project/branch>`).
+  # We locate the last occurrence of a prompt line ending with
+  # `view <entry_point>`, then take the text up to the next prompt line
+  # (which will be from the subsequent `exit` command).
+  # Returns nil if the view block can't be isolated.
+  def parse_view_output(output, entry_point) when is_binary(output) do
+    view_marker = "view " <> entry_point
+
+    case :binary.matches(output, view_marker) do
+      [] ->
+        nil
+
+      matches ->
+        {start, len} = List.last(matches)
+        rest = binary_part(output, start + len, byte_size(output) - start - len)
+        # Skip to end of the view command line.
+        after_cmd =
+          case :binary.split(rest, "\n") do
+            [_, tail] -> tail
+            [_] -> ""
+          end
+
+        body = take_until_next_prompt(after_cmd)
+        trimmed = String.trim(body)
+        if trimmed == "", do: nil, else: trimmed
+    end
+  end
+
+  # Collects lines until we hit a line that looks like a UCM prompt line
+  # (matches something like `name>` or `.>` optionally followed by a command).
+  # UCM's prompts end with `> ` and start at column 0.
+  defp take_until_next_prompt(text) do
+    text
+    |> String.split("\n")
+    |> Enum.reduce_while([], fn line, acc ->
+      if prompt_line?(line) do
+        {:halt, acc}
+      else
+        {:cont, [line | acc]}
+      end
+    end)
+    |> Enum.reverse()
+    |> Enum.join("\n")
+  end
+
+  defp prompt_line?(line) do
+    # Prompt lines typically look like `scratch/main>`, `.>`, `project/branch>`.
+    # The heuristic: a non-indented line containing `> ` or ending with `>`
+    # where the part before `>` has no spaces.
+    Regex.match?(~r/^[^\s>]*>\s?/, line)
   end
 
   defp extractor_source(entry_point, out_dir) do
