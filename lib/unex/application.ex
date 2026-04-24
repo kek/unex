@@ -25,6 +25,7 @@ defmodule Unex.Application do
     base = [
       Unex.Cluster.HashCache,
       Unex.Cluster.SourceCache,
+      Unex.Cluster.DepsCache,
       Unex.Cluster.SyncServer,
       Unex.Services.Registry,
       Unex.Abilities.Scratch,

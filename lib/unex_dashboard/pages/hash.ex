@@ -2,6 +2,7 @@ defmodule Unex.Dashboard.Pages.Hash do
   @moduledoc false
   use Phoenix.LiveDashboard.PageBuilder
 
+  alias Unex.Cluster.DepsCache
   alias Unex.Cluster.HashCache
   alias Unex.Cluster.SourceCache
   alias Unex.Services.Registry
@@ -24,6 +25,8 @@ defmodule Unex.Dashboard.Pages.Hash do
       |> Map.put(:source_link, source_link_for(id))
       |> Map.put(:cached_source, cached_source_for(id))
       |> Map.put(:related_services, services_rooted_at(id))
+      |> Map.put(:forward_deps, forward_deps_for(id))
+      |> Map.put(:reverse_deps, reverse_deps_for(id))
 
     ~H"""
     <.card :if={is_nil(@hash)} title="Hash inspector">
@@ -41,6 +44,22 @@ defmodule Unex.Dashboard.Pages.Hash do
         <li :for={s <- @related_services}>
           <strong>{s.name}</strong>
           <span style="color:#999"> deployed {Calendar.strftime(s.deployed_at, "%Y-%m-%d %H:%M:%S UTC")} on {inspect(s.node)}</span>
+        </li>
+      </ul>
+    </.card>
+
+    <.card :if={@forward_deps != []} title={"Depends on (#{length(@forward_deps)})"}>
+      <ul>
+        <li :for={dep <- @forward_deps}>
+          {Phoenix.HTML.raw(dep_link(@socket, @page, dep))}
+        </li>
+      </ul>
+    </.card>
+
+    <.card :if={@reverse_deps != []} title={"Referenced by (#{length(@reverse_deps)})"}>
+      <ul>
+        <li :for={src <- @reverse_deps}>
+          {Phoenix.HTML.raw(dep_link(@socket, @page, src))}
         </li>
       </ul>
     </.card>
@@ -114,6 +133,52 @@ defmodule Unex.Dashboard.Pages.Hash do
 
   defp services_rooted_at(nil), do: []
   defp services_rooted_at(hash), do: Enum.filter(services(), &(&1.hash == hash))
+
+  defp forward_deps_for(nil), do: []
+
+  defp forward_deps_for(hash) do
+    case safe(fn -> DepsCache.get(hash) end) do
+      {:ok, deps} -> deps
+      _ -> []
+    end
+  end
+
+  defp reverse_deps_for(nil), do: []
+
+  defp reverse_deps_for(hash) do
+    case safe(fn -> DepsCache.referrers(hash) end) do
+      {:ok, list} -> list
+      _ -> []
+    end
+  end
+
+  defp safe(fun) do
+    {:ok, fun.()}
+  catch
+    :exit, _ -> :error
+  end
+
+  # Builds an `<a>` linking to the hash page for a dep. Builtins (`##`
+  # prefix) aren't navigable — render as plain code.
+  defp dep_link(_socket, _page, "##" <> _ = builtin) do
+    ~s[<code>#{h(builtin)}</code> <span style="color:#999">builtin</span>]
+  end
+
+  defp dep_link(socket, page, hash) do
+    url =
+      Phoenix.LiveDashboard.PageBuilder.live_dashboard_path(
+        socket,
+        :hash,
+        page.node,
+        %{},
+        %{"id" => hash}
+      )
+
+    short = String.slice(hash, 0, 16)
+    ~s[<a href="#{h(url)}"><code>#{h(short)}…</code></a>]
+  end
+
+  defp h(s), do: s |> to_string() |> Phoenix.HTML.html_escape() |> Phoenix.HTML.safe_to_string()
 
   defp inserted_at_for(nil), do: nil
 

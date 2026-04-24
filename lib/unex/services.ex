@@ -131,11 +131,24 @@ defmodule Unex.Services do
         store_codes(codes)
         root_hash = HashCache.put(HashCache, root_value)
         maybe_cache_source(root_hash, Map.get(extract, :source))
+        cache_deps(root_hash, Map.get(extract, :deps, %{}))
         release(name, root_hash, project: project, entry_point: entry_point)
 
       {:error, reason} ->
         {:error, reason}
     end
+  end
+
+  # Stores the extractor's per-term dep graph in DepsCache. The map has
+  # "#abc..." or "root" keys from the filenames; normalize them to match
+  # HashCache's keying (no "#" prefix). The "root" entry gets associated
+  # with the computed root_hash.
+  defp cache_deps(root_hash, deps) when is_map(deps) do
+    Enum.each(deps, fn {key, dep_list} ->
+      normalized_key = if key == "root", do: root_hash, else: normalize_hash(key)
+      normalized_deps = Enum.map(dep_list, &normalize_hash/1)
+      Unex.Cluster.DepsCache.put(normalized_key, normalized_deps)
+    end)
   end
 
   defp maybe_cache_source(_hash, nil), do: :ok

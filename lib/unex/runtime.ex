@@ -134,25 +134,40 @@ defmodule Unex.Runtime do
           if File.exists?(root_path) do
             root_value = File.read!(root_path)
 
+            files = File.ls!(out_dir)
+
             codes =
-              out_dir
-              |> File.ls!()
+              files
               |> Enum.filter(&String.ends_with?(&1, ".code"))
               |> Enum.into(%{}, fn fname ->
                 term_text = String.replace_suffix(fname, ".code", "")
                 {term_text, File.read!(Path.join(out_dir, fname))}
               end)
 
+            deps =
+              files
+              |> Enum.filter(&String.ends_with?(&1, ".deps"))
+              |> Enum.into(%{}, fn fname ->
+                key = String.replace_suffix(fname, ".deps", "")
+
+                dep_list =
+                  Path.join(out_dir, fname)
+                  |> File.read!()
+                  |> String.split("\n", trim: true)
+
+                {key, dep_list}
+              end)
+
             manifest_path = Path.join(out_dir, "manifest.txt")
             manifest = if File.exists?(manifest_path), do: File.read!(manifest_path), else: ""
 
             Logger.info(
-              "Runtime.extract: walked #{length(String.split(manifest, "\n", trim: true))} terms, wrote #{map_size(codes)} codes"
+              "Runtime.extract: walked #{length(String.split(manifest, "\n", trim: true))} terms, wrote #{map_size(codes)} codes, #{map_size(deps)} dep entries"
             )
 
             source = parse_view_output(output, entry_point)
 
-            {:ok, %{root_value: root_value, codes: codes, source: source}}
+            {:ok, %{root_value: root_value, codes: codes, source: source, deps: deps}}
           else
             {:error, "extraction failed. UCM output:\n#{output}"}
           end
@@ -234,6 +249,12 @@ defmodule Unex.Runtime do
         Right bs -> Some bs
         Left _   -> None
 
+    Unex.Extract.writeDeps : Text -> [Link.Term] ->{IO, Exception} ()
+    Unex.Extract.writeDeps key deps =
+      depsText = Text.join "\\n" (List.map Link.Term.toText deps)
+      depsPath = FilePath ("#{out_dir}/" Text.++ key Text.++ ".deps")
+      FilePath.writeFileUtf8 depsPath depsText
+
     Unex.Extract.walk : [Link.Term] -> [Link.Term] ->{IO, Exception} [Link.Term]
     Unex.Extract.walk seen frontier = match frontier with
       []      -> seen
@@ -243,18 +264,22 @@ defmodule Unex.Runtime do
         else match Code.lookup t with
           None      -> Unex.Extract.walk (t +: seen) ts
           Some code ->
+            deps = Code.dependencies code
+            Unex.Extract.writeDeps (Link.Term.toText t) deps
             match Unex.Extract.trySerialize code with
-              None -> Unex.Extract.walk (t +: seen) (ts List.++ Code.dependencies code)
+              None -> Unex.Extract.walk (t +: seen) (ts List.++ deps)
               Some bs ->
                 path = FilePath ("#{out_dir}/" Text.++ Link.Term.toText t Text.++ ".code")
                 FilePath.writeFile path bs
-                Unex.Extract.walk (t +: seen) (ts List.++ Code.dependencies code)
+                Unex.Extract.walk (t +: seen) (ts List.++ deps)
 
     Unex.Extract.main : '{IO, Exception} ()
     Unex.Extract.main = do
       v = Value.value #{entry_point}
       FilePath.writeFile (FilePath "#{out_dir}/root.value") (Value.serialize_v4 v)
-      seen = Unex.Extract.walk [] (Value.dependencies v)
+      rootDeps = Value.dependencies v
+      Unex.Extract.writeDeps "root" rootDeps
+      seen = Unex.Extract.walk [] rootDeps
       manifest = Text.join "\\n" (List.map Link.Term.toText seen)
       FilePath.writeFileUtf8 (FilePath "#{out_dir}/manifest.txt") manifest
     """
