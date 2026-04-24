@@ -78,7 +78,35 @@ defmodule Unex.Services do
   then `release` moves the name pointer to any existing hash.
   """
   def release(name, hash, opts \\ []) do
-    Registry.register(Registry, name, normalize_hash(hash), node(), opts)
+    Registry.register(
+      Registry,
+      name,
+      normalize_hash(hash),
+      node(),
+      merge_with_existing(name, opts)
+    )
+  end
+
+  # If the caller didn't provide project/entry_point, preserve whatever the
+  # previous registration had. This keeps Share links alive across a bare
+  # `release` that follows a project-aware `deploy`.
+  defp merge_with_existing(name, opts) do
+    needs_merge? =
+      is_nil(Keyword.get(opts, :project)) or is_nil(Keyword.get(opts, :entry_point))
+
+    if needs_merge? do
+      case Registry.lookup(name) do
+        {:ok, existing} ->
+          opts
+          |> Keyword.put_new(:project, existing.project)
+          |> Keyword.put_new(:entry_point, existing.entry_point)
+
+        :not_found ->
+          opts
+      end
+    else
+      opts
+    end
   end
 
   defp normalize_hash("#" <> rest), do: rest
