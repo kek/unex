@@ -137,25 +137,20 @@ defmodule Unex.Dashboard.Pages.Hash do
   defp forward_deps_for(nil), do: []
 
   defp forward_deps_for(hash) do
-    case safe(fn -> DepsCache.get(hash) end) do
+    case DepsCache.get(hash) do
       {:ok, deps} -> deps
-      _ -> []
+      :not_found -> []
     end
+  catch
+    :exit, _ -> []
   end
 
   defp reverse_deps_for(nil), do: []
 
   defp reverse_deps_for(hash) do
-    case safe(fn -> DepsCache.referrers(hash) end) do
-      {:ok, list} -> list
-      _ -> []
-    end
-  end
-
-  defp safe(fun) do
-    {:ok, fun.()}
+    DepsCache.referrers(hash)
   catch
-    :exit, _ -> :error
+    :exit, _ -> []
   end
 
   # Builds an `<a>` linking to the hash page for a dep. Builtins (`##`
