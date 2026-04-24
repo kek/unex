@@ -167,8 +167,16 @@ defmodule Unex.Runtime do
 
             source = parse_view_output(output, entry_point)
 
+            Logger.info(
+              "Runtime.extract: entry-point source cached: #{if source, do: "#{byte_size(source)} bytes", else: "nope (parse_view_output returned nil)"}"
+            )
+
             manifest_hashes = String.split(manifest, "\n", trim: true)
             term_sources = collect_term_sources(ucm, codebase_path, manifest_hashes)
+
+            Logger.info(
+              "Runtime.extract: term_sources cached: #{map_size(term_sources)} of #{length(manifest_hashes)} manifest entries"
+            )
 
             {:ok,
              %{
