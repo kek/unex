@@ -24,6 +24,7 @@ defmodule Unex.Dashboard.Router do
         services: Unex.Dashboard.Pages.Services,
         cluster: Unex.Dashboard.Pages.Cluster,
         swarm: Unex.Dashboard.Pages.Swarm,
+        code: Unex.Dashboard.Pages.Code,
         hash: Unex.Dashboard.Pages.Hash
       ]
     )

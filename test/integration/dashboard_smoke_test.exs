@@ -33,7 +33,7 @@ defmodule Unex.Integration.DashboardSmokeTest do
   test "dashboard pages (services/cluster/swarm/hash) mount under the current node" do
     node_seg = URI.encode_www_form(Atom.to_string(node()))
 
-    for page <- ~w(services cluster swarm hash) do
+    for page <- ~w(services cluster swarm code hash) do
       path = "/dashboard/#{node_seg}/#{page}"
       conn = authed_get(path)
       assert conn.status == 200, "#{path} returned #{conn.status}: #{inspect(conn.resp_body)}"

@@ -61,6 +61,20 @@ defmodule Unex.Cluster.HashCache do
   end
 
   @doc """
+  Returns `[{hash, size_bytes}, ...]` for every blob in the cache.
+  One ETS traversal.
+  """
+  def list_with_sizes(server \\ __MODULE__) do
+    table = GenServer.call(server, :table)
+
+    :ets.foldl(
+      fn {hash, data}, acc -> [{hash, byte_size(data)} | acc] end,
+      [],
+      table
+    )
+  end
+
+  @doc """
   Returns a map with `:count` and `:total_bytes` — cheap aggregate stats
   for monitoring/dashboards. Walks the ETS table once.
   """
