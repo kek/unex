@@ -167,7 +167,17 @@ defmodule Unex.Runtime do
 
             source = parse_view_output(output, entry_point)
 
-            {:ok, %{root_value: root_value, codes: codes, source: source, deps: deps}}
+            manifest_hashes = String.split(manifest, "\n", trim: true)
+            term_sources = collect_term_sources(ucm, codebase_path, manifest_hashes)
+
+            {:ok,
+             %{
+               root_value: root_value,
+               codes: codes,
+               source: source,
+               deps: deps,
+               term_sources: term_sources
+             }}
           else
             {:error, "extraction failed. UCM output:\n#{output}"}
           end
@@ -176,6 +186,86 @@ defmodule Unex.Runtime do
         end
     end
   end
+
+  # Opens a second UCM session and runs `view #<hash>` for every hash in the
+  # manifest. Parses each view block and returns a map of
+  # `normalized_hash => source_text`. Failures are logged and swallowed —
+  # deploys still succeed on parser/timeout errors.
+  defp collect_term_sources(_ucm, _codebase_path, []), do: %{}
+
+  defp collect_term_sources(ucm, codebase_path, hashes) when is_list(hashes) do
+    try do
+      port =
+        Port.open({:spawn_executable, ucm}, [
+          :binary,
+          :exit_status,
+          :stderr_to_stdout,
+          args: ["--codebase", codebase_path]
+        ])
+
+      view_commands =
+        hashes
+        |> Enum.map(fn h -> "view #{h}\n" end)
+        |> Enum.join()
+
+      send(port, {self(), {:command, view_commands <> "exit\n"}})
+      views_output = collect_output(port, "", @compile_timeout)
+
+      parse_all_view_outputs(views_output, hashes)
+    rescue
+      err ->
+        Logger.warning("Runtime.extract: second UCM session failed: #{inspect(err)}")
+        %{}
+    end
+  end
+
+  @doc false
+  # Given a UCM output containing many `view #<hash>` blocks and the list of
+  # hashes that were viewed, returns a map of `normalized_hash => source_text`.
+  # Keys omit the leading `#` to match HashCache keying. Blocks that are empty
+  # or look like error messages (`"I don't know about"`, `"error:"`) are
+  # skipped.
+  def parse_all_view_outputs(output, hashes)
+      when is_binary(output) and is_list(hashes) do
+    Enum.reduce(hashes, %{}, fn hash, acc ->
+      case extract_view_block(output, hash) do
+        nil -> acc
+        block -> Map.put(acc, normalize_hash(hash), block)
+      end
+    end)
+  end
+
+  defp extract_view_block(output, hash) do
+    view_marker = "view " <> hash
+
+    case :binary.matches(output, view_marker) do
+      [] ->
+        nil
+
+      matches ->
+        {start, len} = List.last(matches)
+        rest = binary_part(output, start + len, byte_size(output) - start - len)
+
+        after_cmd =
+          case :binary.split(rest, "\n") do
+            [_, tail] -> tail
+            [_] -> ""
+          end
+
+        body = take_until_next_prompt(after_cmd)
+        trimmed = String.trim(body)
+
+        cond do
+          trimmed == "" -> nil
+          String.contains?(trimmed, "I don't know about") -> nil
+          String.contains?(trimmed, "error:") -> nil
+          true -> trimmed
+        end
+    end
+  end
+
+  defp normalize_hash("#" <> rest), do: rest
+  defp normalize_hash(hash), do: hash
 
   @doc false
   # Parses UCM stdout to extract the pretty-printed source body produced
