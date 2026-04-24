@@ -47,15 +47,21 @@ defmodule Unex.Services do
   RPC from remote nodes.
   """
   def eval_local(hash, timeout) do
-    with {:ok, resolved} <- SyncServer.resolve([hash]),
-         data when is_binary(data) <- Map.get(resolved, hash) do
-      case Unex.Dispatcher.eval(Unex.Dispatcher, data, timeout) do
-        {:ok, text} -> {:ok, %Result{stdout: text, stderr: "", exit_code: 0}}
-        {:error, reason} -> {:error, reason}
-      end
-    else
-      {:error, _} = err -> err
-      nil -> {:error, {:missing, hash}}
+    cond do
+      not Unex.Dispatcher.running?() ->
+        {:error, :dispatcher_not_started}
+
+      true ->
+        with {:ok, resolved} <- SyncServer.resolve([hash]),
+             data when is_binary(data) <- Map.get(resolved, hash) do
+          case Unex.Dispatcher.eval(Unex.Dispatcher, data, timeout) do
+            {:ok, text} -> {:ok, %Result{stdout: text, stderr: "", exit_code: 0}}
+            {:error, reason} -> {:error, reason}
+          end
+        else
+          {:error, _} = err -> err
+          nil -> {:error, {:missing, hash}}
+        end
     end
   end
 
