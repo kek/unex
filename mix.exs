@@ -7,6 +7,7 @@ defmodule Unex.MixProject do
       version: "0.1.0",
       elixir: "~> 1.17",
       start_permanent: Mix.env() == :prod,
+      aliases: aliases(),
       deps: deps(),
       elixirc_paths: elixirc_paths(Mix.env()),
       releases: releases()
@@ -31,11 +32,33 @@ defmodule Unex.MixProject do
     ]
   end
 
+  defp aliases do
+    [
+      setup: ["deps.get", "assets.setup", "assets.build"],
+      "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
+      "assets.build": ["tailwind unex_dashboard", "esbuild unex_dashboard"],
+      "assets.deploy": [
+        "tailwind unex_dashboard --minify",
+        "esbuild unex_dashboard --minify",
+        "phx.digest"
+      ]
+    ]
+  end
+
   defp deps do
     [
       {:plug, "~> 1.16"},
       {:bandit, "~> 1.6"},
-      {:jason, "~> 1.4"}
+      {:jason, "~> 1.4"},
+      {:phoenix, "~> 1.7.14"},
+      {:phoenix_html, "~> 4.1"},
+      {:phoenix_live_view, "~> 1.0"},
+      {:phoenix_live_dashboard, "~> 0.8"},
+      {:phoenix_pubsub, "~> 2.1"},
+      {:telemetry_metrics, "~> 1.0"},
+      {:telemetry_poller, "~> 1.1"},
+      {:esbuild, "~> 0.8", runtime: Mix.env() == :dev},
+      {:tailwind, "~> 0.2", runtime: Mix.env() == :dev}
     ]
   end
 end
