@@ -1,8 +1,0 @@
-{
-  "name": "unex_dashboard",
-  "version": "0.0.1",
-  "private": true,
-  "dependencies": {
-    "d3": "^7.9.0"
-  }
-}
