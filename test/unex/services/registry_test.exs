@@ -42,4 +42,24 @@ defmodule Unex.Services.RegistryTest do
     assert :ok = Registry.unregister(:test_registry, "to-remove")
     assert :not_found = Registry.lookup(:test_registry, "to-remove")
   end
+
+  describe "broadcasts" do
+    setup do
+      Phoenix.PubSub.subscribe(Unex.PubSub, Unex.Dashboard.Events.topic_services())
+      :ok
+    end
+
+    test "register emits {:registered, name, hash, node}", %{registry: _} do
+      {:ok, _} = Registry.register(:test_registry, "greeter", "abc", node())
+      assert_receive {:services, {:registered, "greeter", "abc", _node}}, 500
+    end
+
+    test "unregister emits {:unregistered, name}", %{registry: _} do
+      Registry.register(:test_registry, "g", "h", node())
+      :ok = Registry.unregister(:test_registry, "g")
+      # Drain the :registered event first so assert_receive matches the :unregistered one.
+      assert_receive {:services, {:registered, "g", _, _}}, 500
+      assert_receive {:services, {:unregistered, "g"}}, 500
+    end
+  end
 end

@@ -76,6 +76,7 @@ defmodule Unex.Services.Registry do
     }
 
     :ets.insert(state.table, {name, entry})
+    Unex.Dashboard.Events.broadcast_services({:registered, name, hash, deploy_node})
     {:reply, {:ok, entry}, state}
   end
 
@@ -112,6 +113,7 @@ defmodule Unex.Services.Registry do
 
   def handle_call({:unregister, name}, _from, state) do
     :ets.delete(state.table, name)
+    Unex.Dashboard.Events.broadcast_services({:unregistered, name})
     {:reply, :ok, state}
   end
 
