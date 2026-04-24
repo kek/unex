@@ -8,13 +8,15 @@ defmodule Unex.Services.Registry do
 
   defmodule Entry do
     @moduledoc "A registered service entry."
-    defstruct [:name, :hash, :node, :deployed_at]
+    defstruct [:name, :hash, :node, :deployed_at, :project, :entry_point]
 
     @type t :: %__MODULE__{
             name: String.t(),
             hash: String.t(),
             node: node(),
-            deployed_at: DateTime.t()
+            deployed_at: DateTime.t(),
+            project: String.t() | nil,
+            entry_point: String.t() | nil
           }
   end
 
@@ -28,9 +30,13 @@ defmodule Unex.Services.Registry do
     GenServer.start_link(__MODULE__, name, name: name)
   end
 
-  @doc "Registers or updates a service name with its hash and deploy node."
-  def register(server \\ __MODULE__, name, hash, deploy_node) do
-    GenServer.call(server, {:register, name, hash, deploy_node})
+  @doc """
+  Registers or updates a service name with its hash and deploy node.
+  `opts` may include `:project` and `:entry_point` (both strings) — captured
+  from the original deploy so the dashboard can link back to source.
+  """
+  def register(server \\ __MODULE__, name, hash, deploy_node, opts \\ []) do
+    GenServer.call(server, {:register, name, hash, deploy_node, opts})
   end
 
   @doc "Looks up a service locally. Returns `{:ok, %Entry{}}` or `:not_found`."
@@ -67,12 +73,14 @@ defmodule Unex.Services.Registry do
   end
 
   @impl true
-  def handle_call({:register, name, hash, deploy_node}, _from, state) do
+  def handle_call({:register, name, hash, deploy_node, opts}, _from, state) do
     entry = %Entry{
       name: name,
       hash: hash,
       node: deploy_node,
-      deployed_at: DateTime.utc_now()
+      deployed_at: DateTime.utc_now(),
+      project: Keyword.get(opts, :project),
+      entry_point: Keyword.get(opts, :entry_point)
     }
 
     :ets.insert(state.table, {name, entry})

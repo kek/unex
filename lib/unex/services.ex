@@ -77,8 +77,8 @@ defmodule Unex.Services do
   Deploys push the root `Value` bytes and `Code` bytes into `HashCache` first,
   then `release` moves the name pointer to any existing hash.
   """
-  def release(name, hash) do
-    Registry.register(name, normalize_hash(hash), node())
+  def release(name, hash, opts \\ []) do
+    Registry.register(Registry, name, normalize_hash(hash), node(), opts)
   end
 
   defp normalize_hash("#" <> rest), do: rest
@@ -102,7 +102,7 @@ defmodule Unex.Services do
       {:ok, %{root_value: root_value, codes: codes}} ->
         store_codes(codes)
         root_hash = HashCache.put(HashCache, root_value)
-        release(name, root_hash)
+        release(name, root_hash, project: project, entry_point: entry_point)
 
       {:error, reason} ->
         {:error, reason}

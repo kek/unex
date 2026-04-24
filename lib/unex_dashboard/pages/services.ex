@@ -45,7 +45,7 @@ defmodule Unex.Dashboard.Pages.Services do
     <.card title="Deployed services">
       <table :if={@services != []} class="table">
         <thead>
-          <tr><th>Name</th><th>Hash</th><th>Node</th><th>Deployed</th></tr>
+          <tr><th>Name</th><th>Hash</th><th>Node</th><th>Deployed</th><th>Source</th></tr>
         </thead>
         <tbody>
           <tr :for={s <- @services}>
@@ -57,6 +57,14 @@ defmodule Unex.Dashboard.Pages.Services do
             </td>
             <td>{inspect(s.node)}</td>
             <td>{Calendar.strftime(s.deployed_at, "%H:%M:%S")}</td>
+            <td>
+              <%= case Unex.Dashboard.SourceLink.build(s.project, s.entry_point) do %>
+                <% nil -> %>
+                  <span style="color:#999">—</span>
+                <% link -> %>
+                  <a href={link.url} target="_blank" rel="noopener">{link.host} ↗</a>
+              <% end %>
+            </td>
           </tr>
         </tbody>
       </table>
