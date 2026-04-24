@@ -94,6 +94,7 @@ defmodule Unex.Cluster.HashCache do
   @impl true
   def handle_call({:put, hash, data}, _from, state) do
     :ets.insert(state.table, {hash, data})
+    Unex.Dashboard.Events.broadcast_hashcache({:put, hash, byte_size(data)})
     {:reply, :ok, state}
   end
 

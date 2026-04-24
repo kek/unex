@@ -68,4 +68,16 @@ defmodule Unex.Cluster.HashCacheTest do
       assert stats.total_bytes == byte_size("hello") + byte_size("world!!")
     end
   end
+
+  describe "broadcasts" do
+    setup %{cache: cache} do
+      Phoenix.PubSub.subscribe(Unex.PubSub, Unex.Dashboard.Events.topic_hashcache())
+      %{cache: cache}
+    end
+
+    test "put broadcasts :put event with hash and size", %{cache: cache} do
+      hash = HashCache.put(cache, "payload")
+      assert_receive {:hashcache, {:put, ^hash, 7}}, 500
+    end
+  end
 end
