@@ -20,6 +20,7 @@ defmodule Unex.Dashboard.Router do
     live_session :dashboard, root_layout: {Unex.Dashboard.Layouts, :root} do
       live("/", IndexLive, :index)
       live("/services", ServicesLive, :index)
+      live("/hash/:id", HashLive, :show)
     end
 
     live_dashboard("/dashboard", metrics: Unex.Dashboard.Telemetry)

@@ -69,7 +69,7 @@ defmodule Unex.Dashboard.ServicesLive do
         <tr :for={s <- @services} class="border-t border-zinc-100">
           <td class="px-3 py-2 font-medium">{s.name}</td>
           <td class="px-3 py-2 font-mono text-xs">
-            <span>{String.slice(s.hash, 0, 12)}…</span>
+            <.link navigate={~p"/hash/#{s.hash}"}>{String.slice(s.hash, 0, 12)}…</.link>
           </td>
           <td class="px-3 py-2">{inspect(s.node)}</td>
           <td class="px-3 py-2">{Calendar.strftime(s.deployed_at, "%H:%M:%S")}</td>
