@@ -256,7 +256,7 @@ defmodule Unex.Runtime do
   # This returns a list of trimmed blocks in command order, dropping the banner.
   def ucm_output_blocks(output) when is_binary(output) do
     output
-    |> strip_ansi()
+    |> sanitize_terminal_bytes()
     |> String.split(~r/^[^\s>]*>\s*$/m, trim: true)
     # Drop the banner block (everything before the first prompt).
     |> tl_or_empty()
@@ -266,7 +266,15 @@ defmodule Unex.Runtime do
   defp tl_or_empty([]), do: []
   defp tl_or_empty([_ | rest]), do: rest
 
-  defp strip_ansi(text), do: Regex.replace(~r/\e\[[0-9;]*[a-zA-Z]/, text, "")
+  # UCM embeds ANSI color escapes (`\e[…m`) AND readline non-printing markers
+  # (SOH `\x01`, STX `\x02`) around styled spans. Both must be removed before
+  # pattern-matching on prompt lines.
+  defp sanitize_terminal_bytes(text) do
+    text
+    |> then(&Regex.replace(~r/\e\[[0-9;]*[a-zA-Z]/, &1, ""))
+    |> String.replace(<<1>>, "")
+    |> String.replace(<<2>>, "")
+  end
 
   defp accept_block(text) do
     cond do
