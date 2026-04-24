@@ -21,9 +21,15 @@ defmodule Unex.Services do
   compatibility — `stdout` holds the Unison program's returned `Text`.
   """
   def call(name, opts \\ []) do
-    case Registry.resolve(name) do
-      {:ok, %Entry{} = entry} -> execute(entry, opts)
-      :not_found -> {:error, :not_found}
+    Unex.Dashboard.Events.broadcast_services({:call_started, name, node()})
+
+    try do
+      case Registry.resolve(name) do
+        {:ok, %Entry{} = entry} -> execute(entry, opts)
+        :not_found -> {:error, :not_found}
+      end
+    after
+      Unex.Dashboard.Events.broadcast_services({:call_finished, name, node()})
     end
   end
 

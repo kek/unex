@@ -21,6 +21,7 @@ defmodule Unex.Dashboard.Router do
       live("/", IndexLive, :index)
       live("/services", ServicesLive, :index)
       live("/cluster", ClusterLive, :index)
+      live("/swarm", SwarmLive, :index)
       live("/hash/:id", HashLive, :show)
     end
 
