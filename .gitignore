@@ -25,3 +25,6 @@ uniops-*.tar
 .unisonHistory
 data/
 scratch.u
+
+priv/static/assets/
+assets/node_modules/
