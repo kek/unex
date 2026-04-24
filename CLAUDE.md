@@ -24,7 +24,13 @@ Clustering: `UNEX_NODE=a UNEX_COOKIE=secret UNEX_PORT=4040 UNEX_PEERS=b@host mix
 
 ## Dependencies
 
-Minimal: Plug (HTTP middleware), Bandit (HTTP server), Jason (JSON). No external database drivers — storage is Mnesia (built into BEAM). Requires Elixir 1.17+ and UCM binary on PATH.
+Core runtime: Plug (HTTP middleware), Bandit (HTTP server), Jason (JSON). No
+external database drivers — storage is Mnesia (built into BEAM). Requires
+Elixir 1.17+ and UCM binary on PATH.
+
+Dashboard (opt-in, same BEAM node): Phoenix 1.7, Phoenix LiveView 1.0,
+Phoenix LiveDashboard, Phoenix.PubSub, telemetry_metrics, telemetry_poller.
+Asset pipeline uses esbuild and tailwind via Mix tasks.
 
 ## Architecture
 
@@ -54,9 +60,19 @@ Plug router dispatches to controllers. `Auth` plug enforces bearer token (`Autho
 
 `Dispatcher.u` is the long-lived evaluator that runs as `ucm run.compiled dispatcher.uc` — rebuild with `mix unex.compile_dispatcher` after changing it.
 
+### Dashboard (`lib/unex_dashboard/`)
+Opt-in Phoenix LiveView subsystem in the same BEAM node. Subscribes to PubSub
+topics published by core. Core → dashboard dependency is one-way and enforced
+by a boundary test. See `docs/architecture.md#dashboard-opt-in`.
+
 ## Configuration
 
 Resolved in order (first wins): env vars → config file (`UNEX_CONFIG`) → defaults. Key env vars: `UNEX_NODE`, `UNEX_COOKIE`, `UNEX_PORT` (default 4040), `UNEX_DATA` (default `./data`), `UNEX_PEERS`, `UNEX_SECRET` (auto-generated if not set), `UNEX_CONFIG_KEY`, `UCM_PATH`, `UNEX_DISPATCHER` (path to `dispatcher.uc`; defaults to `<UNEX_DATA>/dispatcher.uc`, set to a path outside the data volume in production).
+
+Dashboard env vars:
+- `UNEX_DASHBOARD` — set to `1`/`true` to enable the dashboard subsystem
+- `UNEX_DASHBOARD_PORT` — dashboard HTTP port (default 4041)
+- `UNEX_DASHBOARD_USER`, `UNEX_DASHBOARD_PASS` — Basic Auth credentials
 
 ## Test Structure
 

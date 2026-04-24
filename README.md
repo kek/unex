@@ -18,6 +18,27 @@ curl -s localhost:4040/health
 # {"status":"ok"}
 ```
 
+## Dashboard
+
+The dashboard is an opt-in Phoenix LiveView subsystem that runs in the same
+BEAM node as the Unex core and exposes real-time views of cluster state, hash
+cache distribution, service lifecycle, and runtime metrics.
+
+Enable it with:
+
+    UNEX_DASHBOARD=1 UNEX_DASHBOARD_USER=admin UNEX_DASHBOARD_PASS=secret mix unex.start
+
+It listens on port `:4041` by default and is protected by HTTP Basic Auth.
+Open `http://localhost:4041` in a browser.
+
+Routes:
+- `/` — landing page
+- `/services` — deployed service list + live activity log
+- `/cluster` — connected node graph
+- `/hash/:id` — blob inspector
+- `/swarm` — in-flight service calls across nodes
+- `/dashboard` — Phoenix LiveDashboard (VM, Bandit, Mnesia)
+
 ## Using from Unison
 
 Install the library and point it at your server:
@@ -83,6 +104,10 @@ Curl reference for every endpoint: **[docs/api.md](docs/api.md)**
 | `UNEX_CONFIG` | *(none)* | Path to config file |
 | `UCM_PATH` | `ucm` | Path to UCM binary |
 | `UNEX_DISPATCHER` | `<UNEX_DATA>/dispatcher.uc` | Path to the compiled dispatcher bundle (used by the long-lived dispatcher process that evaluates service calls) |
+| `UNEX_DASHBOARD` | *(off)* | Set to `1`/`true`/`yes` to enable the Phoenix LiveView dashboard |
+| `UNEX_DASHBOARD_PORT` | `4041` | Dashboard HTTP port |
+| `UNEX_DASHBOARD_USER` | `admin` | Basic Auth username for the dashboard |
+| `UNEX_DASHBOARD_PASS` | `unex` | Basic Auth password for the dashboard |
 
 Config file: `~/.config/unex/config.exs`, `/etc/unex/config.exs`, or `UNEX_CONFIG`. See `config.example.exs` for a full reference.
 

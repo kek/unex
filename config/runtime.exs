@@ -93,6 +93,26 @@ if config_env() != :test do
     cookie: cookie,
     start_api: true
 
+  # --- Dashboard ---
+  dashboard_enabled =
+    case System.get_env("UNEX_DASHBOARD") do
+      v when v in ["1", "true", "yes"] -> true
+      _ -> Map.get(file_config, :start_dashboard, false)
+    end
+
+  config :unex,
+    start_dashboard: dashboard_enabled,
+    dashboard_port: get_int.("UNEX_DASHBOARD_PORT", :dashboard_port, 4041),
+    dashboard_username: get.("UNEX_DASHBOARD_USER", :dashboard_username, "admin"),
+    dashboard_password: get.("UNEX_DASHBOARD_PASS", :dashboard_password, "unex")
+
+  config :unex, Unex.Dashboard.Endpoint,
+    http: [ip: {0, 0, 0, 0}, port: get_int.("UNEX_DASHBOARD_PORT", :dashboard_port, 4041)],
+    server: dashboard_enabled,
+    secret_key_base:
+      System.get_env("UNEX_DASHBOARD_SECRET") ||
+        :crypto.hash(:sha256, "unex-dashboard-default-#{node()}") |> Base.encode16()
+
   if key_generated? do
     IO.puts("[unex] No encryption key configured. Generated: #{encryption_key}")
     IO.puts("[unex] Set UNEX_CONFIG_KEY to persist this key across restarts.")

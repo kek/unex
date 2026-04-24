@@ -187,3 +187,23 @@ The server interacts with UCM in two places:
 2. **The dispatcher** (`Unex.Dispatcher`). Spawns one UCM at app boot with `run.compiled $UNEX_DISPATCHER` and keeps it alive. Every service call is a message over the dispatcher's TCP socket — no new UCM subprocess per call. The compiled `dispatcher.uc` is produced once per image/release by `mix unex.compile_dispatcher`; at runtime it reads `UNEX_URL` + `UNEX_SECRET` from the environment to call back into this server's `/code/:termhash` endpoint for any `Code` it's missing.
 
 Because the dispatcher bundle's hash is tied to the exact UCM version that built it, image builds must pin UCM. In Docker, the same `UCM_VERSION` build arg is shared between the build and runtime stages; the bundle lives at `/app/dispatcher.uc` (outside the data volume) so a mounted `/app/data` doesn't shadow it.
+
+## Dashboard (opt-in)
+
+An opt-in Phoenix LiveView subsystem under `lib/unex_dashboard/`, started
+only when `:start_dashboard` is true. It runs in the same BEAM node as
+core (shared ETS/process space for zero-cost observation) but maintains
+a one-way dependency: core must not reference `Unex.Dashboard.*` except
+for `Unex.Dashboard.Events`, which is the contract module for PubSub
+broadcasts. The boundary is enforced by a source-scan test
+(`test/unex_dashboard/boundary_test.exs`).
+
+`Phoenix.PubSub` is always started by `Unex.Application`; when the
+dashboard is off, broadcasts simply have no subscribers. Core publishes
+to three topics: `"hashcache"` (put), `"services"` (register / unregister
+/ call_started / call_finished), and `"cluster"` (node up).
+
+The dashboard listens on a separate port (`:4041` default) and is
+protected by HTTP Basic Auth. It embeds `Phoenix.LiveDashboard` at
+`/dashboard` for VM/Bandit/Mnesia inspection alongside custom LiveViews
+at `/services`, `/cluster`, `/hash/:id`, and `/swarm`.
