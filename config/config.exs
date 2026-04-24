@@ -10,7 +10,8 @@ config :unex,
   start_dashboard: false,
   dashboard_port: 4041,
   dashboard_username: "admin",
-  dashboard_password: "unex"
+  dashboard_password: "unex",
+  dashboard_children: [Unex.Dashboard.Telemetry, Unex.Dashboard.Endpoint]
 
 config :unex, Unex.Dashboard.Endpoint,
   url: [host: "localhost"],

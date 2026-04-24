@@ -59,7 +59,7 @@ defmodule Unex.Application do
 
   defp dashboard_children do
     if Application.get_env(:unex, :start_dashboard, false) do
-      [Unex.Dashboard.Telemetry, Unex.Dashboard.Endpoint]
+      Application.get_env(:unex, :dashboard_children, [])
     else
       []
     end
