@@ -240,106 +240,76 @@ defmodule Unex.Runtime do
   end
 
   @doc false
-  # Given a UCM output containing many `view #<hash>` blocks and the list of
-  # hashes that were viewed, returns a map of `normalized_hash => source_text`.
-  # Keys omit the leading `#` to match HashCache keying. Blocks that are empty
-  # or look like error messages (`"I don't know about"`, `"error:"`) are
+  # Strips ANSI color escape sequences and splits a UCM transcript into the
+  # list of output blocks between successive prompt lines. UCM does NOT echo
+  # commands to its stdout; it prints a prompt line (e.g. `runtime/main> `),
+  # reads a command, then prints that command's output, then the next prompt.
+  # So for commands [c1, c2, c3, c4] the transcript is:
+  #
+  #   <banner>
+  #   prompt>
+  #   <c1 output>
+  #   prompt>
+  #   <c2 output>
+  #   ...
+  #
+  # This returns a list of trimmed blocks in command order, dropping the banner.
+  def ucm_output_blocks(output) when is_binary(output) do
+    output
+    |> strip_ansi()
+    |> String.split(~r/^[^\s>]*>\s*$/m, trim: true)
+    # Drop the banner block (everything before the first prompt).
+    |> tl_or_empty()
+    |> Enum.map(&String.trim/1)
+  end
+
+  defp tl_or_empty([]), do: []
+  defp tl_or_empty([_ | rest]), do: rest
+
+  defp strip_ansi(text), do: Regex.replace(~r/\e\[[0-9;]*[a-zA-Z]/, text, "")
+
+  defp accept_block(text) do
+    cond do
+      text == "" -> nil
+      String.contains?(text, "I don't know about") -> nil
+      Regex.match?(~r/\berror:/i, text) -> nil
+      true -> text
+    end
+  end
+
+  @doc false
+  # Given the UCM transcript from a session that ran one or more `view #<hash>`
+  # commands (optionally followed by `exit`), returns a map of
+  # `normalized_hash => source_text` by zipping hashes with blocks in order.
+  # Keys omit the leading `#`. Blocks that are empty or look like errors are
   # skipped.
   def parse_all_view_outputs(output, hashes)
       when is_binary(output) and is_list(hashes) do
-    Enum.reduce(hashes, %{}, fn hash, acc ->
-      case extract_view_block(output, hash) do
+    blocks = ucm_output_blocks(output)
+
+    hashes
+    |> Enum.zip(blocks)
+    |> Enum.reduce(%{}, fn {hash, block}, acc ->
+      case accept_block(block) do
         nil -> acc
-        block -> Map.put(acc, normalize_hash(hash), block)
+        source -> Map.put(acc, normalize_hash(hash), source)
       end
     end)
-  end
-
-  defp extract_view_block(output, hash) do
-    view_marker = "view " <> hash
-
-    case :binary.matches(output, view_marker) do
-      [] ->
-        nil
-
-      matches ->
-        {start, len} = List.last(matches)
-        rest = binary_part(output, start + len, byte_size(output) - start - len)
-
-        after_cmd =
-          case :binary.split(rest, "\n") do
-            [_, tail] -> tail
-            [_] -> ""
-          end
-
-        body = take_until_next_prompt(after_cmd)
-        trimmed = String.trim(body)
-
-        cond do
-          trimmed == "" -> nil
-          String.contains?(trimmed, "I don't know about") -> nil
-          String.contains?(trimmed, "error:") -> nil
-          true -> trimmed
-        end
-    end
   end
 
   defp normalize_hash("#" <> rest), do: rest
   defp normalize_hash(hash), do: hash
 
   @doc false
-  # Parses UCM stdout to extract the pretty-printed source body produced
-  # by `view <entry_point>`. UCM echoes each command with a prompt prefix
-  # (typically `.> ` or similar project-qualified forms like `project/branch>`).
-  # We locate the last occurrence of a prompt line ending with
-  # `view <entry_point>`, then take the text up to the next prompt line
-  # (which will be from the subsequent `exit` command).
-  # Returns nil if the view block can't be isolated.
-  def parse_view_output(output, entry_point) when is_binary(output) do
-    view_marker = "view " <> entry_point
-
-    case :binary.matches(output, view_marker) do
-      [] ->
-        nil
-
-      matches ->
-        {start, len} = List.last(matches)
-        rest = binary_part(output, start + len, byte_size(output) - start - len)
-        # Skip to end of the view command line.
-        after_cmd =
-          case :binary.split(rest, "\n") do
-            [_, tail] -> tail
-            [_] -> ""
-          end
-
-        body = take_until_next_prompt(after_cmd)
-        trimmed = String.trim(body)
-        if trimmed == "", do: nil, else: trimmed
-    end
-  end
-
-  # Collects lines until we hit a line that looks like a UCM prompt line
-  # (matches something like `name>` or `.>` optionally followed by a command).
-  # UCM's prompts end with `> ` and start at column 0.
-  defp take_until_next_prompt(text) do
-    text
-    |> String.split("\n")
-    |> Enum.reduce_while([], fn line, acc ->
-      if prompt_line?(line) do
-        {:halt, acc}
-      else
-        {:cont, [line | acc]}
-      end
-    end)
+  # Parses the session-1 transcript (pull / load / run / view <entry_point>
+  # [/exit]) and returns the view's output block. The view is always the last
+  # command before exit, so the last output block in the transcript is the
+  # pretty-printed source. Returns nil if no non-empty block is present.
+  def parse_view_output(output, _entry_point) when is_binary(output) do
+    output
+    |> ucm_output_blocks()
     |> Enum.reverse()
-    |> Enum.join("\n")
-  end
-
-  defp prompt_line?(line) do
-    # Prompt lines typically look like `scratch/main>`, `.>`, `project/branch>`.
-    # The heuristic: a non-indented line containing `> ` or ending with `>`
-    # where the part before `>` has no spaces.
-    Regex.match?(~r/^[^\s>]*>\s?/, line)
+    |> Enum.find_value(&accept_block/1)
   end
 
   defp extractor_source(entry_point, out_dir) do
