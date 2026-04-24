@@ -7,8 +7,18 @@ defmodule Unex.Application do
     mnesia_dir = Application.get_env(:unex, :mnesia_dir)
     if mnesia_dir, do: Unex.Storage.Schema.init(mnesia_dir)
 
-    children = cluster_children() ++ peer_children() ++ api_children()
+    children =
+      pubsub_children() ++
+        cluster_children() ++
+        peer_children() ++
+        api_children() ++
+        dashboard_children()
+
     Supervisor.start_link(children, strategy: :one_for_one, name: Unex.Supervisor)
+  end
+
+  defp pubsub_children do
+    [{Phoenix.PubSub, name: Unex.PubSub}]
   end
 
   defp cluster_children do
@@ -42,6 +52,14 @@ defmodule Unex.Application do
     if Application.get_env(:unex, :start_api, false) do
       port = Application.get_env(:unex, :api_port, 4040)
       [{Bandit, plug: Unex.API.Router, port: port}]
+    else
+      []
+    end
+  end
+
+  defp dashboard_children do
+    if Application.get_env(:unex, :start_dashboard, false) do
+      [Unex.Dashboard.Telemetry, Unex.Dashboard.Endpoint]
     else
       []
     end

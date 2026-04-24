@@ -8,3 +8,5 @@ config :unex,
   blobs_dir: nil,
   config_encryption_key: "test-key-not-for-production",
   api_secret: "test-secret"
+
+config :unex, start_dashboard: false
