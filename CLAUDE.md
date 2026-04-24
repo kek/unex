@@ -72,6 +72,7 @@ Resolved in order (first wins): env vars → config file (`UNEX_CONFIG`) → def
 Dashboard env vars:
 - `UNEX_DASHBOARD` — set to `1`/`true` to enable the dashboard subsystem
 - `UNEX_DASHBOARD_PORT` — dashboard HTTP port (default 4041)
+- `UNEX_DASHBOARD_HOST` — bind address (default `127.0.0.1`; set to `0.0.0.0` to expose on all interfaces)
 - `UNEX_DASHBOARD_USER`, `UNEX_DASHBOARD_PASS` — Basic Auth credentials
 
 ## Test Structure

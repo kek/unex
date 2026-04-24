@@ -48,9 +48,14 @@ defmodule Mix.Tasks.Unex.Start do
         else: "--sname"
 
     args = [
-      node_flag, node_name,
-      "--cookie", cookie,
-      "-S", "mix", "run", "--no-halt"
+      node_flag,
+      node_name,
+      "--cookie",
+      cookie,
+      "-S",
+      "mix",
+      "run",
+      "--no-halt"
     ]
 
     iex_path = System.find_executable("iex") || "iex"
@@ -87,6 +92,8 @@ defmodule Mix.Tasks.Unex.Start do
       persistent: false
     )
 
+    load_runtime_config()
+
     File.mkdir_p!(config.mnesia_dir)
     File.mkdir_p!(config.blobs_dir)
     Mix.Task.run("app.start")
@@ -98,4 +105,13 @@ defmodule Mix.Tasks.Unex.Start do
     Process.sleep(:infinity)
   end
 
+  defp load_runtime_config do
+    runtime_path = Path.join([File.cwd!(), "config", "runtime.exs"])
+
+    if File.exists?(runtime_path) do
+      runtime_path
+      |> Config.Reader.read!(env: Mix.env())
+      |> Application.put_all_env(persistent: false)
+    end
+  end
 end

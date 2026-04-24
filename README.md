@@ -106,6 +106,7 @@ Curl reference for every endpoint: **[docs/api.md](docs/api.md)**
 | `UNEX_DISPATCHER` | `<UNEX_DATA>/dispatcher.uc` | Path to the compiled dispatcher bundle (used by the long-lived dispatcher process that evaluates service calls) |
 | `UNEX_DASHBOARD` | *(off)* | Set to `1`/`true`/`yes` to enable the Phoenix LiveView dashboard |
 | `UNEX_DASHBOARD_PORT` | `4041` | Dashboard HTTP port |
+| `UNEX_DASHBOARD_HOST` | `127.0.0.1` | Dashboard bind address; set to `0.0.0.0` to expose on all interfaces |
 | `UNEX_DASHBOARD_USER` | `admin` | Basic Auth username for the dashboard |
 | `UNEX_DASHBOARD_PASS` | `unex` | Basic Auth password for the dashboard |
 

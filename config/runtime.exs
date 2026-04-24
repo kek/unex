@@ -106,8 +106,20 @@ if config_env() != :test do
     dashboard_username: get.("UNEX_DASHBOARD_USER", :dashboard_username, "admin"),
     dashboard_password: get.("UNEX_DASHBOARD_PASS", :dashboard_password, "unex")
 
+  dashboard_host =
+    case get.("UNEX_DASHBOARD_HOST", :dashboard_host, "127.0.0.1") do
+      "0.0.0.0" ->
+        {0, 0, 0, 0}
+
+      other ->
+        other
+        |> String.split(".")
+        |> Enum.map(&String.to_integer/1)
+        |> List.to_tuple()
+    end
+
   config :unex, Unex.Dashboard.Endpoint,
-    http: [ip: {0, 0, 0, 0}, port: get_int.("UNEX_DASHBOARD_PORT", :dashboard_port, 4041)],
+    http: [ip: dashboard_host, port: get_int.("UNEX_DASHBOARD_PORT", :dashboard_port, 4041)],
     server: dashboard_enabled,
     secret_key_base:
       System.get_env("UNEX_DASHBOARD_SECRET") ||
