@@ -51,7 +51,7 @@ defmodule Unex.Dashboard.Pages.Services do
           <tr :for={s <- @services}>
             <td><strong>{s.name}</strong></td>
             <td>
-              <.link patch={live_dashboard_path(@socket, :hash, @page.node, %{}, %{"id" => s.hash})}>
+              <.link navigate={live_dashboard_path(@socket, :hash, @page.node, %{}, %{"id" => s.hash})}>
                 <code>{String.slice(s.hash, 0, 12)}…</code>
               </.link>
             </td>
