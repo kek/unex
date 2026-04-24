@@ -54,6 +54,7 @@ defmodule Unex.MixProject do
       {:phoenix_html, "~> 4.1"},
       {:phoenix_live_view, "~> 1.0"},
       {:phoenix_live_dashboard, "~> 0.8"},
+      {:phoenix_live_reload, "~> 1.5", only: :dev},
       {:phoenix_pubsub, "~> 2.1"},
       {:telemetry_metrics, "~> 1.0"},
       {:telemetry_poller, "~> 1.1"},

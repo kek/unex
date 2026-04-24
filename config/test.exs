@@ -10,3 +10,8 @@ config :unex,
   api_secret: "test-secret"
 
 config :unex, start_dashboard: false
+
+config :unex, Unex.Dashboard.Endpoint,
+  http: [ip: {127, 0, 0, 1}, port: 4042],
+  secret_key_base: String.duplicate("a", 64),
+  server: false
