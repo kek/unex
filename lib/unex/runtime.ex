@@ -228,10 +228,25 @@ defmodule Unex.Runtime do
         |> Enum.map(fn h -> "view #{h}\n" end)
         |> Enum.join()
 
-      send(port, {self(), {:command, view_commands <> "exit\n"}})
+      # Switch to the runtime namespace (where `pull` put the project in
+      # session 1) so UCM resolves hash-addressed terms in the same context.
+      prelude = "project.switch runtime/main\n"
+
+      send(port, {self(), {:command, prelude <> view_commands <> "exit\n"}})
       views_output = collect_output(port, "", @compile_timeout)
 
-      parse_all_view_outputs(views_output, hashes)
+      # Skip the block from the `project.switch` command (always first).
+      blocks = ucm_output_blocks(views_output)
+      view_blocks = tl_or_empty(blocks)
+
+      hashes
+      |> Enum.zip(view_blocks)
+      |> Enum.reduce(%{}, fn {hash, block}, acc ->
+        case accept_block(block) do
+          nil -> acc
+          source -> Map.put(acc, normalize_hash(hash), source)
+        end
+      end)
     rescue
       err ->
         Logger.warning("Runtime.extract: second UCM session failed: #{inspect(err)}")
@@ -279,7 +294,10 @@ defmodule Unex.Runtime do
   defp accept_block(text) do
     cond do
       text == "" -> nil
+      String.starts_with?(text, "⚠️") -> nil
       String.contains?(text, "I don't know about") -> nil
+      String.contains?(text, "The following names were not found") -> nil
+      String.contains?(text, "Check your spelling") -> nil
       Regex.match?(~r/\berror:/i, text) -> nil
       true -> text
     end
