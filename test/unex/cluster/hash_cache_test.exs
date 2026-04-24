@@ -54,4 +54,18 @@ defmodule Unex.Cluster.HashCacheTest do
     expected = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
     assert HashCache.hash_of("hello") == expected
   end
+
+  describe "stats/1" do
+    test "returns count 0 and total_bytes 0 for empty cache", %{cache: cache} do
+      assert %{count: 0, total_bytes: 0} = HashCache.stats(cache)
+    end
+
+    test "returns count and total bytes after puts", %{cache: cache} do
+      _h1 = HashCache.put(cache, "hello")
+      _h2 = HashCache.put(cache, "world!!")
+      stats = HashCache.stats(cache)
+      assert stats.count == 2
+      assert stats.total_bytes == byte_size("hello") + byte_size("world!!")
+    end
+  end
 end

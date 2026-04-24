@@ -41,6 +41,7 @@ defmodule Unex.Cluster.HashCache do
   @doc "Returns `{:ok, data}` or `:not_found`. Reads directly from ETS."
   def get(server \\ __MODULE__, hash) do
     table = GenServer.call(server, :table)
+
     case :ets.lookup(table, hash) do
       [{^hash, data}] -> {:ok, data}
       [] -> :not_found
@@ -57,6 +58,22 @@ defmodule Unex.Cluster.HashCache do
   def list(server \\ __MODULE__) do
     table = GenServer.call(server, :table)
     :ets.select(table, [{{:"$1", :_}, [], [:"$1"]}])
+  end
+
+  @doc """
+  Returns a map with `:count` and `:total_bytes` — cheap aggregate stats
+  for monitoring/dashboards. Walks the ETS table once.
+  """
+  def stats(server \\ __MODULE__) do
+    table = GenServer.call(server, :table)
+
+    :ets.foldl(
+      fn {_hash, data}, acc ->
+        %{count: acc.count + 1, total_bytes: acc.total_bytes + byte_size(data)}
+      end,
+      %{count: 0, total_bytes: 0},
+      table
+    )
   end
 
   @doc "Computes the SHA256 hex string for `data` (lowercase)."
