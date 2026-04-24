@@ -167,9 +167,21 @@ defmodule Unex.Runtime do
 
             source = parse_view_output(output, entry_point)
 
-            Logger.info(
-              "Runtime.extract: entry-point source cached: #{if source, do: "#{byte_size(source)} bytes", else: "nope (parse_view_output returned nil)"}"
-            )
+            if source do
+              Logger.info(
+                "Runtime.extract: entry-point source cached: #{byte_size(source)} bytes"
+              )
+            else
+              dump_path =
+                Path.join(System.tmp_dir!(), "unex_extract_debug_#{:os.system_time(:second)}.log")
+
+              File.write!(dump_path, output)
+              view_markers = :binary.matches(output, "view ") |> length()
+
+              Logger.warning(
+                "Runtime.extract: parse_view_output returned nil. #{view_markers} 'view ' markers in output. Full UCM output dumped to: #{dump_path}"
+              )
+            end
 
             manifest_hashes = String.split(manifest, "\n", trim: true)
             term_sources = collect_term_sources(ucm, codebase_path, manifest_hashes)
