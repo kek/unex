@@ -1,3 +1,5 @@
+*Note: this repository is an experimental investigation for myself to learn about Unison, operations and AI engineering. It's not intended to be productified or to compete with Unison Cloud. The basic example does work as a kind of proof of concept, but the system isn't feature complete or secure for running any type of workload. For proper deployment of Unison services, please use Unison Cloud! Everything except this paragraph is written by coding agents.*
+
 # the unix hater's revenge
 
 An open-source ops platform for [Unison](https://www.unison-lang.org/) programs. Durable storage, encrypted secrets, clustering, and content-addressed code execution — all on the BEAM.
