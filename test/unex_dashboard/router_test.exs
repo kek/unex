@@ -1,6 +1,5 @@
 defmodule Unex.Dashboard.RouterTest do
   use ExUnit.Case, async: false
-  import Plug.Test
   import Plug.Conn
 
   setup do
@@ -17,7 +16,7 @@ defmodule Unex.Dashboard.RouterTest do
     assert conn.status == 401
   end
 
-  test "authenticated request renders index" do
+  test "authenticated root redirects to /dashboard" do
     creds = Base.encode64("admin:unex")
 
     conn =
@@ -25,7 +24,7 @@ defmodule Unex.Dashboard.RouterTest do
       |> put_req_header("authorization", "Basic #{creds}")
 
     conn = Unex.Dashboard.Endpoint.call(conn, Unex.Dashboard.Endpoint.init([]))
-    assert conn.status == 200
-    assert conn.resp_body =~ "Unex Dashboard"
+    assert conn.status == 302
+    assert Plug.Conn.get_resp_header(conn, "location") == ["/dashboard"]
   end
 end

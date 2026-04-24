@@ -8,23 +8,24 @@ defmodule Unex.Dashboard.Router do
     plug(:accepts, ["html"])
     plug(:fetch_session)
     plug(:fetch_live_flash)
-    plug(:put_root_layout, html: {Unex.Dashboard.Layouts, :root})
     plug(:protect_from_forgery)
     plug(:put_secure_browser_headers)
     plug(Unex.Dashboard.BasicAuth)
   end
 
-  scope "/", Unex.Dashboard do
+  scope "/" do
     pipe_through(:browser)
 
-    live_session :dashboard, root_layout: {Unex.Dashboard.Layouts, :root} do
-      live("/", IndexLive, :index)
-      live("/services", ServicesLive, :index)
-      live("/cluster", ClusterLive, :index)
-      live("/swarm", SwarmLive, :index)
-      live("/hash/:id", HashLive, :show)
-    end
+    get("/", Unex.Dashboard.Redirect, :to_dashboard)
 
-    live_dashboard("/dashboard", metrics: Unex.Dashboard.Telemetry)
+    live_dashboard("/dashboard",
+      metrics: Unex.Dashboard.Telemetry,
+      additional_pages: [
+        services: Unex.Dashboard.Pages.Services,
+        cluster: Unex.Dashboard.Pages.Cluster,
+        swarm: Unex.Dashboard.Pages.Swarm,
+        hash: Unex.Dashboard.Pages.Hash
+      ]
+    )
   end
 end

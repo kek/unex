@@ -1,0 +1,71 @@
+defmodule Unex.Dashboard.Pages.Services do
+  @moduledoc false
+  use Phoenix.LiveDashboard.PageBuilder
+
+  alias Unex.Dashboard.Events
+  alias Unex.Services.Registry
+
+  @max_log 50
+
+  @impl true
+  def menu_link(_session, _caps), do: {:ok, "Services"}
+
+  @impl true
+  def mount(_params, _session, socket) do
+    if connected?(socket) do
+      Phoenix.PubSub.subscribe(Unex.PubSub, Events.topic_services())
+    end
+
+    {:ok, assign(socket, services: services(), log: [])}
+  end
+
+  @impl true
+  def handle_info({:services, event}, socket) do
+    log = Enum.take([format(event) | socket.assigns.log], @max_log)
+    {:noreply, assign(socket, services: services(), log: log)}
+  end
+
+  defp services do
+    Registry.list()
+  catch
+    :exit, _ -> []
+  end
+
+  defp format({:registered, name, hash, node}),
+    do: "[registered] #{name} → #{String.slice(hash, 0, 10)}… on #{inspect(node)}"
+
+  defp format({:unregistered, name}), do: "[unregistered] #{name}"
+  defp format({:call_started, name, node}), do: "[call start] #{name} on #{inspect(node)}"
+  defp format({:call_finished, name, node}), do: "[call end]   #{name} on #{inspect(node)}"
+  defp format(other), do: inspect(other)
+
+  @impl true
+  def render(assigns) do
+    ~H"""
+    <.card title="Deployed services">
+      <table :if={@services != []} class="table">
+        <thead>
+          <tr><th>Name</th><th>Hash</th><th>Node</th><th>Deployed</th></tr>
+        </thead>
+        <tbody>
+          <tr :for={s <- @services}>
+            <td><strong>{s.name}</strong></td>
+            <td>
+              <.link patch={live_dashboard_path(@socket, :hash, @page.node, %{}, %{"id" => s.hash})}>
+                <code>{String.slice(s.hash, 0, 12)}…</code>
+              </.link>
+            </td>
+            <td>{inspect(s.node)}</td>
+            <td>{Calendar.strftime(s.deployed_at, "%H:%M:%S")}</td>
+          </tr>
+        </tbody>
+      </table>
+      <p :if={@services == []}>No services deployed.</p>
+    </.card>
+
+    <.card title="Activity">
+      <pre style="max-height: 16rem; overflow:auto; background:#111; color:#9f9; padding:0.5rem; font-size:12px;"><%= Enum.join(@log, "\n") %></pre>
+    </.card>
+    """
+  end
+end

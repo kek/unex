@@ -18,29 +18,26 @@ defmodule Unex.Integration.DashboardSmokeTest do
     |> Unex.Dashboard.Endpoint.call(Unex.Dashboard.Endpoint.init([]))
   end
 
-  test "/ returns 200 with auth" do
+  test "/ redirects to /dashboard with auth" do
     conn = authed_get("/")
-    assert conn.status == 200
-    assert conn.resp_body =~ "Unex Dashboard"
+    assert conn.status == 302
+    assert Plug.Conn.get_resp_header(conn, "location") == ["/dashboard"]
   end
 
-  test "/services, /cluster, /swarm all return 200" do
-    for path <- ["/services", "/cluster", "/swarm"] do
+  test "/dashboard returns 200 or 302" do
+    conn = authed_get("/dashboard")
+    # LiveDashboard redirects to /dashboard/NODE/home on first hit.
+    assert conn.status in [200, 302]
+  end
+
+  test "dashboard pages (services/cluster/swarm/hash) mount under the current node" do
+    node_seg = URI.encode_www_form(Atom.to_string(node()))
+
+    for page <- ~w(services cluster swarm hash) do
+      path = "/dashboard/#{node_seg}/#{page}"
       conn = authed_get(path)
       assert conn.status == 200, "#{path} returned #{conn.status}: #{inspect(conn.resp_body)}"
     end
-  end
-
-  test "/hash/:id returns 200 (missing blob shows not-found copy)" do
-    conn = authed_get("/hash/deadbeef")
-    assert conn.status == 200
-    assert conn.resp_body =~ "not found"
-  end
-
-  test "/dashboard (Phoenix LiveDashboard) returns 200 or 302" do
-    # LiveDashboard may redirect to /dashboard/home; either is acceptable.
-    conn = authed_get("/dashboard")
-    assert conn.status in [200, 302]
   end
 
   test "unauthenticated request returns 401" do
