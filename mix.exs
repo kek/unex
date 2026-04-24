@@ -15,7 +15,7 @@ defmodule Unex.MixProject do
 
   def application do
     [
-      extra_applications: [:logger, :mnesia],
+      extra_applications: [:logger, :mnesia, :os_mon],
       mod: {Unex.Application, []}
     ]
   end
