@@ -77,6 +77,18 @@ defmodule Unex.Dashboard.Pages.Hash do
       <pre style="white-space: pre-wrap; word-break: break-word;"><%= @cached_source %></pre>
     </.card>
 
+    <.card
+      :if={not is_nil(@hash) and is_nil(@cached_source) and match?({:found, _, _}, @result)}
+      title="Source"
+    >
+      <p style="color:#666">
+        No pretty-printed source cached for this hash. UCM can only resolve
+        hashes registered in the codebase's name map; this blob is likely a
+        compiled sub-reference (anonymous lambda or synthesized binding)
+        produced during compilation and not directly addressable by name.
+      </p>
+    </.card>
+
     <.card :if={@result == :missing and not is_nil(@hash)} title="Blob">
       <p>Blob <code>{@hash}</code> not found in the local cache.</p>
     </.card>

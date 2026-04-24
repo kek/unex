@@ -207,3 +207,26 @@ The dashboard listens on a separate port (`:4041` default) and is
 protected by HTTP Basic Auth. It embeds `Phoenix.LiveDashboard` at
 `/dashboard` for VM/Bandit/Mnesia inspection alongside custom LiveViews
 at `/services`, `/cluster`, `/hash/:id`, and `/swarm`.
+
+### Source caching and its limits
+
+At deploy time, `Runtime.extract` captures pretty-printed Unison source
+alongside the bytecode. Two passes:
+
+1. **Entry-point source.** The first UCM session runs
+   `view <entry_point>` after the extractor finishes. Output is cached
+   in `SourceCache` keyed by the service's root hash. This always works
+   for the top-level name that was deployed.
+2. **Per-term source.** A second UCM session runs `view #<hash>` for
+   every hash in the manifest. UCM resolves these against its
+   codebase **name map**, not its bytecode-level references. Many
+   hashes returned by `Code.dependencies` (anonymous lambdas, component
+   sub-references, synthesized bindings) are NOT in the name map —
+   UCM responds with "not found in the codebase" and the cache skips
+   them.
+
+Consequence: on `/hash/:id`, top-level deployed entry points always
+have source; transitive sub-reference hashes often don't. The page
+renders an explanatory note in that case. Lifting this limitation
+would need either UCM exposing hash→source for raw bytecode references,
+or an extractor-level name↔hash dump we can feed back in.

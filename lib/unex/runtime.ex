@@ -228,25 +228,13 @@ defmodule Unex.Runtime do
         |> Enum.map(fn h -> "view #{h}\n" end)
         |> Enum.join()
 
-      # Switch to the runtime namespace (where `pull` put the project in
-      # session 1) so UCM resolves hash-addressed terms in the same context.
-      prelude = "project.switch runtime/main\n"
-
-      send(port, {self(), {:command, prelude <> view_commands <> "exit\n"}})
+      send(port, {self(), {:command, view_commands <> "exit\n"}})
       views_output = collect_output(port, "", @compile_timeout)
 
-      # Skip the block from the `project.switch` command (always first).
-      blocks = ucm_output_blocks(views_output)
-      view_blocks = tl_or_empty(blocks)
-
-      hashes
-      |> Enum.zip(view_blocks)
-      |> Enum.reduce(%{}, fn {hash, block}, acc ->
-        case accept_block(block) do
-          nil -> acc
-          source -> Map.put(acc, normalize_hash(hash), source)
-        end
-      end)
+      # Most manifest hashes are bytecode-level sub-references that UCM's
+      # `view` can't resolve (no entry in the name map) — parse_all_view_outputs
+      # filters those out via accept_block.
+      parse_all_view_outputs(views_output, hashes)
     rescue
       err ->
         Logger.warning("Runtime.extract: second UCM session failed: #{inspect(err)}")
