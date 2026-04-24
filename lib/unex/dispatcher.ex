@@ -262,7 +262,17 @@ defmodule Unex.Dispatcher do
   end
 
   defp default_path do
-    data_dir = Application.get_env(:unex, :data_dir, "data")
-    Path.join(data_dir, "dispatcher.uc")
+    # Resolved from :dispatcher_path (set by UNEX_DISPATCHER in runtime.exs),
+    # falling back to <data_dir>/dispatcher.uc for local development.
+    # In production the bundle lives OUTSIDE the data volume so a host-mounted
+    # /app/data doesn't shadow the image-baked .uc.
+    case Application.get_env(:unex, :dispatcher_path) do
+      nil ->
+        data_dir = Application.get_env(:unex, :data_dir, "data")
+        Path.join(data_dir, "dispatcher.uc")
+
+      path when is_binary(path) ->
+        path
+    end
   end
 end

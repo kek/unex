@@ -40,6 +40,7 @@ if config_env() != :test do
   cookie = get.("UNEX_COOKIE", :cookie, nil)
 
   peers_raw = System.get_env("UNEX_PEERS")
+
   peers =
     cond do
       peers_raw != nil -> String.split(peers_raw, ",", trim: true) |> Enum.map(&String.trim/1)
@@ -76,6 +77,8 @@ if config_env() != :test do
     raise "UNEX_NODE is required when UNEX_PEERS is set"
   end
 
+  dispatcher_path = System.get_env("UNEX_DISPATCHER") || Map.get(file_config, :dispatcher_path)
+
   # --- Apply config ---
   config :unex,
     api_port: get_int.("UNEX_PORT", :api_port, 4040),
@@ -84,6 +87,7 @@ if config_env() != :test do
     config_encryption_key: encryption_key,
     api_secret: api_secret,
     ucm_path: get.("UCM_PATH", :ucm_path, "ucm"),
+    dispatcher_path: dispatcher_path,
     peers: peers,
     node_name: node_name,
     cookie: cookie,
@@ -92,7 +96,10 @@ if config_env() != :test do
   if key_generated? do
     IO.puts("[unex] No encryption key configured. Generated: #{encryption_key}")
     IO.puts("[unex] Set UNEX_CONFIG_KEY to persist this key across restarts.")
-    IO.puts("[unex] WARNING: If the key changes, existing encrypted Config values become unreadable.")
+
+    IO.puts(
+      "[unex] WARNING: If the key changes, existing encrypted Config values become unreadable."
+    )
   end
 
   if secret_generated? do
