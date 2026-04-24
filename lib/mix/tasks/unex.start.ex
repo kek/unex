@@ -111,7 +111,22 @@ defmodule Mix.Tasks.Unex.Start do
     if File.exists?(runtime_path) do
       runtime_path
       |> Config.Reader.read!(env: Mix.env())
-      |> Application.put_all_env(persistent: false)
+      |> Enum.each(&merge_app_env/1)
     end
+  end
+
+  defp merge_app_env({app, entries}) do
+    Enum.each(entries, fn {key, value} ->
+      merged =
+        case {Application.get_env(app, key), value} do
+          {existing, new} when is_list(existing) and is_list(new) ->
+            Keyword.merge(existing, new)
+
+          {_existing, new} ->
+            new
+        end
+
+      Application.put_env(app, key, merged, persistent: false)
+    end)
   end
 end

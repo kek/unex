@@ -119,6 +119,7 @@ if config_env() != :test do
     end
 
   config :unex, Unex.Dashboard.Endpoint,
+    adapter: Bandit.PhoenixAdapter,
     http: [ip: dashboard_host, port: get_int.("UNEX_DASHBOARD_PORT", :dashboard_port, 4041)],
     server: dashboard_enabled,
     secret_key_base:
