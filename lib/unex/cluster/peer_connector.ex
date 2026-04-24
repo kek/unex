@@ -30,6 +30,12 @@ defmodule Unex.Cluster.PeerConnector do
     end)
   end
 
+  @doc false
+  def record_up(state, peer) do
+    Unex.Dashboard.Events.broadcast_cluster({:node_up, peer})
+    %{state | connected: MapSet.put(state.connected, peer)}
+  end
+
   @impl true
   def init(opts) do
     peers = Keyword.get(opts, :peers, []) |> parse_peers()
@@ -85,7 +91,7 @@ defmodule Unex.Cluster.PeerConnector do
       case Node.connect(peer) do
         true ->
           Logger.info("[unex] Connected to peer #{peer}")
-          %{state | connected: MapSet.put(state.connected, peer)}
+          record_up(state, peer)
 
         _ ->
           backoff = Map.get(state.backoffs, peer, state.base_interval)
