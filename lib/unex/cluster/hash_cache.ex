@@ -75,6 +75,41 @@ defmodule Unex.Cluster.HashCache do
   end
 
   @doc """
+  Returns `[{hash, size_bytes, inserted_at_ms}, ...]` for every blob.
+  `inserted_at_ms` is the `System.system_time(:millisecond)` captured on
+  the most recent put for that hash (0 if meta missing, which shouldn't
+  happen under normal operation).
+  """
+  def list_with_meta(server \\ __MODULE__) do
+    table = GenServer.call(server, :table)
+    meta = GenServer.call(server, :meta)
+
+    :ets.foldl(
+      fn {hash, data}, acc ->
+        ts =
+          case :ets.lookup(meta, hash) do
+            [{^hash, t}] -> t
+            [] -> 0
+          end
+
+        [{hash, byte_size(data), ts} | acc]
+      end,
+      [],
+      table
+    )
+  end
+
+  @doc "Returns the insertion timestamp (ms) for `hash`, or `nil`."
+  def inserted_at(server \\ __MODULE__, hash) do
+    meta = GenServer.call(server, :meta)
+
+    case :ets.lookup(meta, hash) do
+      [{^hash, t}] -> t
+      [] -> nil
+    end
+  end
+
+  @doc """
   Returns a map with `:count` and `:total_bytes` — cheap aggregate stats
   for monitoring/dashboards. Walks the ETS table once.
   """
@@ -102,17 +137,18 @@ defmodule Unex.Cluster.HashCache do
   @impl true
   def init(name) do
     table = :ets.new(name, [:set, :public, {:read_concurrency, true}])
-    {:ok, %{table: table}}
+    meta = :ets.new(:"#{name}_meta", [:set, :public, {:read_concurrency, true}])
+    {:ok, %{table: table, meta: meta}}
   end
 
   @impl true
   def handle_call({:put, hash, data}, _from, state) do
     :ets.insert(state.table, {hash, data})
+    :ets.insert(state.meta, {hash, System.system_time(:millisecond)})
     Unex.Dashboard.Events.broadcast_hashcache({:put, hash, byte_size(data)})
     {:reply, :ok, state}
   end
 
-  def handle_call(:table, _from, state) do
-    {:reply, state.table, state}
-  end
+  def handle_call(:table, _from, state), do: {:reply, state.table, state}
+  def handle_call(:meta, _from, state), do: {:reply, state.meta, state}
 end

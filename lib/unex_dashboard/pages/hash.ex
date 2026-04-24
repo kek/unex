@@ -20,8 +20,10 @@ defmodule Unex.Dashboard.Pages.Hash do
       assigns
       |> Map.put(:result, lookup(id))
       |> Map.put(:hash, id)
+      |> Map.put(:inserted_at, inserted_at_for(id))
       |> Map.put(:source_link, source_link_for(id))
       |> Map.put(:cached_source, cached_source_for(id))
+      |> Map.put(:related_services, services_rooted_at(id))
 
     ~H"""
     <.card :if={is_nil(@hash)} title="Hash inspector">
@@ -31,12 +33,17 @@ defmodule Unex.Dashboard.Pages.Hash do
     <.fields_card
       :if={match?({:found, _, _}, @result)}
       title="Blob"
-      fields={[
-        {"Hash", @hash},
-        {"Size (bytes)", elem(@result, 1) |> Integer.to_string()},
-        {"Preview (first 256 bytes)", elem(@result, 2)}
-      ]}
+      fields={blob_fields(@hash, @result, @inserted_at)}
     />
+
+    <.card :if={@related_services != []} title="Deployed services rooted at this hash">
+      <ul>
+        <li :for={s <- @related_services}>
+          <strong>{s.name}</strong>
+          <span style="color:#999"> deployed {Calendar.strftime(s.deployed_at, "%Y-%m-%d %H:%M:%S UTC")} on {inspect(s.node)}</span>
+        </li>
+      </ul>
+    </.card>
 
     <.card :if={@source_link} title="Source">
       <p>
@@ -103,6 +110,40 @@ defmodule Unex.Dashboard.Pages.Hash do
 
   defp find_service_by_hash(hash) do
     Enum.find(services(), &(&1.hash == hash))
+  end
+
+  defp services_rooted_at(nil), do: []
+  defp services_rooted_at(hash), do: Enum.filter(services(), &(&1.hash == hash))
+
+  defp inserted_at_for(nil), do: nil
+
+  defp inserted_at_for(hash) do
+    HashCache.inserted_at(hash)
+  catch
+    :exit, _ -> nil
+  end
+
+  defp blob_fields(hash, {:found, size, preview_text}, inserted_at) do
+    base = [
+      {"Hash", hash},
+      {"Size (bytes)", Integer.to_string(size)}
+    ]
+
+    added =
+      case inserted_at do
+        nil -> []
+        0 -> []
+        ms -> [{"Added", format_ts(ms)}]
+      end
+
+    base ++ added ++ [{"Preview (first 256 bytes)", preview_text}]
+  end
+
+  defp format_ts(ms) do
+    ms
+    |> DateTime.from_unix!(:millisecond)
+    |> DateTime.shift_zone!("Etc/UTC")
+    |> Calendar.strftime("%Y-%m-%d %H:%M:%S UTC")
   end
 
   defp services do
