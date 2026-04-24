@@ -360,13 +360,15 @@ rollback = do
 
 ### How deployment works
 
-1. Client sends the entry point's function name + Share project name to `POST /services/:name/deploy`
-2. Server pulls the project from Unison Share into its persistent codebase
-3. Server compiles the entry point to `.uc` bytecode using `ucm compile`
-4. `.uc` bytes are stored in HashCache by SHA256 hash
-5. Service name is registered pointing to that hash
+1. Client sends the entry point's function name + Share project name to `POST /services/:name/deploy`.
+2. Server pulls the project from Unison Share into its persistent codebase.
+3. Server generates a small extractor `.u` file that references the entry point by name, runs it under `ucm run.file`, and writes out:
+   - The serialized root `Value` (the thunk itself).
+   - Every transitively reachable `Code` definition, one file per `Link.Term` hash.
+4. Each `Code` blob is stored in `HashCache` keyed by its `Link.Term` hash; the root `Value` bytes are stored under their SHA256.
+5. Service name is registered pointing to the root-value hash.
 
-When the service is called, the server runs the `.uc` with `ucm run.compiled`, injecting `UNEX_URL` and `UNEX_SECRET` as environment variables. Because `mainService` wraps `myService` with `Unex.main`, the handler reads these env vars and wires up all ability handlers.
+When the service is called, Unex does **not** spawn UCM. It passes the root `Value` bytes to a long-lived `Unex.Dispatcher` process (one per node, booted at app start from `dispatcher.uc`). The dispatcher deserializes the `Value`, fetches any missing `Code` from `GET /code/:termhash` via HTTP, caches it via `Code.cache_`, and evaluates the thunk. Anything the program writes to stdout is captured and returned as the service's result; `UNEX_URL` and `UNEX_SECRET` are injected as environment variables so `Unex.main` inside the program can wire up ability handlers.
 
 Because credentials never appear in Unison code, all service definitions are safe to share on Unison Share.
 

@@ -5,8 +5,9 @@ An open-source ops platform for [Unison](https://www.unison-lang.org/) programs.
 ## Quick start
 
 ```bash
-# Prerequisites: Elixir 1.17+, UCM (Unison Codebase Manager)
+# Prerequisites: Elixir 1.17+, UCM (Unison Codebase Manager) 1.2.0
 mix deps.get
+mix unex.compile_dispatcher   # one-time, produces data/dispatcher.uc
 mix unex.start
 ```
 
@@ -81,6 +82,7 @@ Curl reference for every endpoint: **[docs/api.md](docs/api.md)**
 | `UNEX_CONFIG_KEY` | *(generated)* | AES-256-GCM encryption key for Config secrets |
 | `UNEX_CONFIG` | *(none)* | Path to config file |
 | `UCM_PATH` | `ucm` | Path to UCM binary |
+| `UNEX_DISPATCHER` | `<UNEX_DATA>/dispatcher.uc` | Path to the compiled dispatcher bundle (used by the long-lived dispatcher process that evaluates service calls) |
 
 Config file: `~/.config/unex/config.exs`, `/etc/unex/config.exs`, or `UNEX_CONFIG`. See `config.example.exs` for a full reference.
 
