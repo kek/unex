@@ -172,15 +172,7 @@ defmodule Unex.Runtime do
                 "Runtime.extract: entry-point source cached: #{byte_size(source)} bytes"
               )
             else
-              dump_path =
-                Path.join(System.tmp_dir!(), "unex_extract_debug_#{:os.system_time(:second)}.log")
-
-              File.write!(dump_path, output)
-              view_markers = :binary.matches(output, "view ") |> length()
-
-              Logger.warning(
-                "Runtime.extract: parse_view_output returned nil. #{view_markers} 'view ' markers in output. Full UCM output dumped to: #{dump_path}"
-              )
+              Logger.warning("Runtime.extract: parse_view_output returned nil for #{entry_point}")
             end
 
             manifest_hashes = String.split(manifest, "\n", trim: true)
@@ -262,11 +254,10 @@ defmodule Unex.Runtime do
       %{}
   end
 
-  # How many names we're willing to enumerate per lib subnamespace.
-  # Generates roughly that many lines in the dump program — UCM compiles
-  # it cleanly up to a few thousand without trouble. Names beyond the cap
-  # within a subnamespace simply won't get source cached.
-  @per_subns_cap 1500
+  # Per-subnamespace name cap. Lib subnamespaces (lib.base, lib.kek_unex_*)
+  # can have thousands of definitions; we only need surface APIs for the
+  # deployed program. Beyond this cap, names won't get source.
+  @per_subns_cap 300
 
   defp enumerate_local_names(ucm, codebase_path) do
     project_names =
@@ -319,24 +310,51 @@ defmodule Unex.Runtime do
     block
     |> String.split("\n")
     |> Enum.flat_map(fn line ->
-      case Regex.run(~r/^\s*\d+\.\s+([\w.!'+\-*\/<>=?@$%^&|~]+)\s*:/u, line) do
+      # Restrict to alphanumeric+underscore+dot identifiers. Names with
+      # operator chars (`!=`, `+`, `<`, `?`, etc.) confuse Unison's parser
+      # when used in `termLink <name>` and we don't have a clean way to
+      # quote them. Skip those — they're a small minority.
+      case Regex.run(~r/^\s*\d+\.\s+([A-Za-z][\w.]*)\s*:/u, line) do
         [_, name] -> [name]
         _ -> []
       end
     end)
   end
 
+  # Names per chunk. Each chunk becomes its own .u file with a uniquely-named
+  # dump function, so one bad chunk's parse error doesn't kill the others.
+  # Chunks are loaded and run in a SINGLE UCM session to avoid paying startup
+  # cost N times.
+  @chunk_size 200
+
+  defp lookup_name_hashes(_ucm, _codebase_path, _out_dir, []), do: %{}
+
   defp lookup_name_hashes(ucm, codebase_path, out_dir, names) do
-    dump_path = Path.join(out_dir, "_namedump.u")
-    File.write!(dump_path, namedump_source(names))
+    chunks = names |> Enum.chunk_every(@chunk_size) |> Enum.with_index()
 
-    cmd = "load #{dump_path}\nrun Unex.NameDump.dump\n"
+    # Each chunk gets a unique dump function name so we can `run` them all
+    # in sequence without redefining and clobbering.
+    chunks
+    |> Enum.each(fn {chunk, idx} ->
+      File.write!(Path.join(out_dir, "_namedump_#{idx}.u"), namedump_source(chunk, idx))
+    end)
+
+    # Interleave load+run per chunk in one UCM session. If chunk N's load
+    # fails to compile, only its run is lost — subsequent chunks still
+    # load+run cleanly.
+    cmd =
+      chunks
+      |> Enum.map(fn {_chunk, idx} ->
+        path = Path.join(out_dir, "_namedump_#{idx}.u")
+        "load #{path}\nrun Unex.NameDump.dump_#{idx}\n"
+      end)
+      |> Enum.join()
+
     output = run_ucm(ucm, codebase_path, cmd)
-
     parse_namedump_output(output)
   end
 
-  defp namedump_source(names) do
+  defp namedump_source(names, idx) do
     body =
       names
       |> Enum.map(fn n ->
@@ -345,8 +363,8 @@ defmodule Unex.Runtime do
       |> Enum.join("\n")
 
     """
-    Unex.NameDump.dump : '{IO, Exception} ()
-    Unex.NameDump.dump = do
+    Unex.NameDump.dump_#{idx} : '{IO, Exception} ()
+    Unex.NameDump.dump_#{idx} = do
     #{body}
     """
   end
@@ -358,11 +376,14 @@ defmodule Unex.Runtime do
   end
 
   defp parse_namedump_output(output) do
+    # UCM may concatenate the first printLine of a `run` block onto the
+    # same line as the preceding prompt (`runtime/main> name<TAB>#hash`).
+    # Match the `name<TAB>#hash` pattern anywhere in the line.
     output
     |> sanitize_terminal_bytes()
     |> String.split("\n")
     |> Enum.flat_map(fn line ->
-      case Regex.run(~r/^([\w.!'+\-*\/<>=?@$%^&|~]+)\t#?([a-z0-9]+)$/iu, String.trim(line)) do
+      case Regex.run(~r/([A-Za-z][\w.]*)\t#?([a-z0-9]{40,})\b/u, line) do
         [_, name, hash] -> [{name, normalize_hash(hash)}]
         _ -> []
       end

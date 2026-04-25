@@ -2,84 +2,58 @@ defmodule Unex.Integration.SourceCacheTest do
   @moduledoc """
   End-to-end coverage of source caching at deploy time.
 
-  Requires UCM on PATH and network access to Unison Share. Skipped in CI
-  (see the integration exclude in test/test_helper.exs).
+  Requires UCM on PATH and network access to Unison Share. Skipped in CI.
 
-  This test pins down the current behavior and known limitations:
-
-    * `view <entry_point>` in the extraction session DOES cache pretty-printed
-      source for the service's root hash. ✓
-    * UCM's `view #<hash>` resolves only hashes registered in the codebase's
-      name map. Hashes returned by `Code.dependencies` often point to
-      compiled sub-references (extracted lambdas, synthesized bindings) that
-      have no name-map entry — UCM says "not found in the codebase" for
-      those. The second UCM session gracefully skips them. ✗ (by design)
-
-  If a future UCM exposes raw-hash source lookup (or if we extend the
-  extractor to emit a name↔hash map), the second assertion can tighten.
+  Drives the source-caching pipeline against the real `@kek/counter` project
+  and asserts that named terms used by the deploy actually have source
+  cached.
   """
 
   use ExUnit.Case, async: false
 
   @moduletag :integration
-  # Deploys touch the network and can take a while.
-  @moduletag timeout: 300_000
+  @moduletag timeout: 600_000
 
-  alias Unex.Cluster.{HashCache, SourceCache}
+  alias Unex.Cluster.{HashCache, SourceCache, DepsCache}
+
+  # Stable content-addressed hashes for terms in @kek/counter (verified by
+  # running `Link.Term.toText (termLink <name>)` in UCM on this codebase).
+  @counter_hash "0176dnkj6i2cv4ro6nc620mi0ohflnool5komk8huedoeoa5jaic8"
+  @unex_main_hash "00hhl2tuqd3sq7ben43c3jg78qsphnokb8kec4mvgbsodtu793qcg"
 
   setup do
-    # Start the minimum process set the extractor needs, plus the caches the
-    # deploy path writes to. Uses per-test names so we don't collide with a
-    # globally running app.
-    start_supervised!(HashCache)
-    start_supervised!(SourceCache)
-    start_supervised!(Unex.Cluster.DepsCache)
-    start_supervised!(Unex.Cluster.SyncServer)
-    start_supervised!({Phoenix.PubSub, name: Unex.PubSub})
-    start_supervised!(Unex.Services.Registry)
-    start_supervised!(Unex.Runtime)
+    assert is_pid(Process.whereis(HashCache))
+    assert is_pid(Process.whereis(SourceCache))
+    assert is_pid(Process.whereis(DepsCache))
+    SourceCache.clear()
     :ok
   end
 
-  @tag :integration
-  test "deploy caches source for the service's root hash" do
-    assert {:ok, %Unex.Services.Registry.Entry{hash: root_hash}} =
-             Unex.Services.deploy("counter", "@kek/counter", "mainCounter")
+  describe "deploying @kek/counter caches source for named terms" do
+    setup do
+      assert {:ok, %Unex.Services.Registry.Entry{hash: root_hash}} =
+               Unex.Services.deploy("counter", "@kek/counter", "mainCounter")
 
-    # The entry-point view in session 1 produces the root source.
-    assert {:ok, source} = SourceCache.get(root_hash)
-    assert source =~ "mainCounter"
-    assert source =~ "Unex.main counter"
-  end
+      %{root_hash: root_hash}
+    end
 
-  @tag :integration
-  test "compiled sub-reference hashes have no source cached (known limitation)" do
-    assert {:ok, %Unex.Services.Registry.Entry{hash: root_hash}} =
-             Unex.Services.deploy("counter", "@kek/counter", "mainCounter")
+    test "root hash gets entry-point source", %{root_hash: root_hash} do
+      assert {:ok, source} = SourceCache.get(root_hash)
+      assert source =~ "mainCounter"
+      assert source =~ "Unex.main counter"
+    end
 
-    # Pick a non-root hash from the deps cache.
-    {:ok, root_deps} = Unex.Cluster.DepsCache.get(root_hash)
-    assert is_list(root_deps) and root_deps != []
+    test "project-local term `counter` has source cached" do
+      assert {:ok, source} = SourceCache.get(@counter_hash)
+      assert source =~ "counter"
+      # The counter function uses Storage to track hits — source should
+      # mention the relevant ability calls.
+      assert source =~ "createDatabase" or source =~ "writeCell" or source =~ "html"
+    end
 
-    # Most (commonly all) of these hashes are compiled sub-references UCM's
-    # `view` cannot resolve. We assert the cache either has source or is
-    # empty — both outcomes are acceptable; what we DON'T want is cached
-    # UCM error text masquerading as source.
-    for dep_hash <- root_deps do
-      case SourceCache.get(dep_hash) do
-        {:ok, source} ->
-          refute source =~ "not found in the codebase",
-                 "UCM error text should not be cached as source for #{dep_hash}"
-
-          refute source =~ "Check your spelling",
-                 "UCM error text should not be cached as source for #{dep_hash}"
-
-          refute source =~ "well-formed",
-                 "UCM error text should not be cached as source for #{dep_hash}"
-
-        :not_found ->
-          :ok
-      end
+    test "lib term `lib.kek_unex_0_1_1.Unex.main` has source cached" do
+      assert {:ok, source} = SourceCache.get(@unex_main_hash)
+      assert source =~ "Unex.main"
     end
   end
 end

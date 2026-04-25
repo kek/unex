@@ -29,6 +29,9 @@ defmodule Unex.Cluster.SourceCache do
     end
   end
 
+  @doc "Clears the cache. Used by integration tests that re-deploy."
+  def clear(server \\ __MODULE__), do: GenServer.call(server, :clear)
+
   @impl true
   def init(name) do
     table = :ets.new(name, [:set, :protected, {:read_concurrency, true}])
@@ -38,6 +41,11 @@ defmodule Unex.Cluster.SourceCache do
   @impl true
   def handle_call({:put, hash, source}, _from, state) do
     :ets.insert(state.table, {hash, source})
+    {:reply, :ok, state}
+  end
+
+  def handle_call(:clear, _from, state) do
+    :ets.delete_all_objects(state.table)
     {:reply, :ok, state}
   end
 
