@@ -262,12 +262,51 @@ defmodule Unex.Runtime do
       %{}
   end
 
-  defp enumerate_local_names(ucm, codebase_path) do
-    output = run_ucm(ucm, codebase_path, "find\n")
+  # How many names we're willing to enumerate per lib subnamespace.
+  # Generates roughly that many lines in the dump program — UCM compiles
+  # it cleanly up to a few thousand without trouble. Names beyond the cap
+  # within a subnamespace simply won't get source cached.
+  @per_subns_cap 1500
 
-    output
+  defp enumerate_local_names(ucm, codebase_path) do
+    project_names =
+      run_ucm(ucm, codebase_path, "find\n")
+      |> ucm_output_blocks()
+      |> Enum.flat_map(&parse_find_block/1)
+
+    lib_subs = list_lib_subnamespaces(ucm, codebase_path)
+
+    Logger.info("Runtime.extract: discovered lib subnamespaces: #{Enum.join(lib_subs, ", ")}")
+
+    lib_names =
+      Enum.flat_map(lib_subs, fn sub ->
+        ns = "lib.#{sub}"
+
+        run_ucm(ucm, codebase_path, "find-in #{ns}\n")
+        |> ucm_output_blocks()
+        |> Enum.flat_map(&parse_find_block/1)
+        |> Enum.take(@per_subns_cap)
+        |> Enum.map(&"#{ns}.#{&1}")
+      end)
+
+    Enum.uniq(project_names ++ lib_names)
+  end
+
+  # Parses output of `ls lib`: lines like `"  N. <name>. (<count> terms)"`.
+  # Returns just the namespace names (without the trailing dot).
+  defp list_lib_subnamespaces(ucm, codebase_path) do
+    run_ucm(ucm, codebase_path, "ls lib\n")
     |> ucm_output_blocks()
-    |> Enum.flat_map(&parse_find_block/1)
+    |> Enum.flat_map(fn block ->
+      block
+      |> String.split("\n")
+      |> Enum.flat_map(fn line ->
+        case Regex.run(~r/^\s*\d+\.\s+([\w]+)\./u, line) do
+          [_, sub] -> [sub]
+          _ -> []
+        end
+      end)
+    end)
     |> Enum.uniq()
   end
 
