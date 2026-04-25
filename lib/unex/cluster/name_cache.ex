@@ -32,6 +32,12 @@ defmodule Unex.Cluster.NameCache do
     end
   end
 
+  @doc "Returns the full cache as a map `%{hash => name}`."
+  def to_map(server \\ __MODULE__) do
+    table = GenServer.call(server, :table)
+    table |> :ets.tab2list() |> Map.new()
+  end
+
   @doc "Clears the cache. Used by integration tests that re-deploy."
   def clear(server \\ __MODULE__), do: GenServer.call(server, :clear)
 

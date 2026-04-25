@@ -75,7 +75,7 @@ defmodule Unex.Dashboard.Pages.Hash do
     </.card>
 
     <.card :if={@cached_source} title="Source (cached from UCM)">
-      <pre style="white-space: pre-wrap; word-break: break-word;"><%= @cached_source %></pre>
+      <pre style="white-space: pre-wrap; word-break: break-word;">{Phoenix.HTML.raw(linkify_source(@socket, @page, @cached_source))}</pre>
     </.card>
 
     <.card
@@ -198,6 +198,55 @@ defmodule Unex.Dashboard.Pages.Hash do
     end
   catch
     :exit, _ -> nil
+  end
+
+  # Tokenizes pretty-printed Unison source and wraps any identifier that
+  # exactly matches a known name (from the deploy's name → hash map) in an
+  # `<a>` to its hash page. Everything else is HTML-escaped. Conservative
+  # by design: only exact full-path matches qualify, so locals, type
+  # constructors, and partially-qualified mentions stay as plain text.
+  defp linkify_source(socket, page, source) when is_binary(source) do
+    name_to_hash = name_to_hash_map()
+    identifier = ~r/[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)*/u
+
+    {acc, last} =
+      identifier
+      |> Regex.scan(source, return: :index)
+      |> Enum.reduce({[], 0}, fn [{start, len}], {acc, pos} ->
+        gap = binary_part(source, pos, start - pos)
+        token = binary_part(source, start, len)
+
+        piece =
+          case Map.get(name_to_hash, token) do
+            nil -> h(token)
+            hash -> token_link(socket, page, hash, token)
+          end
+
+        {[acc, h(gap), piece], start + len}
+      end)
+
+    trailing = binary_part(source, last, byte_size(source) - last)
+    IO.iodata_to_binary([acc, h(trailing)])
+  end
+
+  defp name_to_hash_map do
+    NameCache.to_map()
+    |> Enum.reduce(%{}, fn {hash, name}, acc -> Map.put(acc, name, hash) end)
+  catch
+    :exit, _ -> %{}
+  end
+
+  defp token_link(socket, page, hash, token) do
+    url =
+      Phoenix.LiveDashboard.PageBuilder.live_dashboard_path(
+        socket,
+        :hash,
+        page.node,
+        %{},
+        %{"id" => hash}
+      )
+
+    ~s[<a href="#{h(url)}">#{h(token)}</a>]
   end
 
   defp h(s), do: s |> to_string() |> Phoenix.HTML.html_escape() |> Phoenix.HTML.safe_to_string()

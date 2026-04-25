@@ -34,4 +34,10 @@ defmodule Unex.Cluster.NameCacheTest do
     assert :not_found = NameCache.get(c, "a")
     assert :not_found = NameCache.get(c, "b")
   end
+
+  test "to_map returns all entries", %{cache: c} do
+    :ok = NameCache.put(c, "h1", "Foo.bar")
+    :ok = NameCache.put(c, "h2", "baz")
+    assert %{"h1" => "Foo.bar", "h2" => "baz"} = NameCache.to_map(c)
+  end
 end
