@@ -178,7 +178,7 @@ defmodule Unex.Runtime do
             manifest_hashes = String.split(manifest, "\n", trim: true)
             manifest_set = MapSet.new(manifest_hashes, &normalize_hash/1)
 
-            term_sources =
+            %{sources: term_sources, names: hash_to_name} =
               collect_named_term_sources(ucm, codebase_path, out_dir, manifest_set)
 
             Logger.info(
@@ -191,7 +191,8 @@ defmodule Unex.Runtime do
                codes: codes,
                source: source,
                deps: deps,
-               term_sources: term_sources
+               term_sources: term_sources,
+               names: hash_to_name
              }}
           else
             {:error, "extraction failed. UCM output:\n#{output}"}
@@ -220,7 +221,7 @@ defmodule Unex.Runtime do
     Logger.info("Runtime.extract: enumerated #{length(names)} named terms in project")
 
     if names == [] do
-      %{}
+      %{sources: %{}, names: %{}}
     else
       name_to_hash = lookup_name_hashes(ucm, codebase_path, out_dir, names)
 
@@ -239,19 +240,25 @@ defmodule Unex.Runtime do
         "Runtime.extract: #{map_size(relevant)} of those names are reachable from the deploy"
       )
 
+      hash_to_name =
+        Enum.reduce(relevant, %{}, fn {name, hash}, acc -> Map.put(acc, hash, name) end)
+
       sources_by_name = view_sources(ucm, codebase_path, Map.keys(relevant))
 
-      Enum.reduce(relevant, %{}, fn {name, hash}, acc ->
-        case Map.get(sources_by_name, name) do
-          nil -> acc
-          source -> Map.put(acc, hash, source)
-        end
-      end)
+      sources =
+        Enum.reduce(relevant, %{}, fn {name, hash}, acc ->
+          case Map.get(sources_by_name, name) do
+            nil -> acc
+            source -> Map.put(acc, hash, source)
+          end
+        end)
+
+      %{sources: sources, names: hash_to_name}
     end
   rescue
     err ->
       Logger.warning("Runtime.extract: collect_named_term_sources failed: #{inspect(err)}")
-      %{}
+      %{sources: %{}, names: %{}}
   end
 
   # Per-subnamespace name cap. Lib subnamespaces (lib.base, lib.kek_unex_*)

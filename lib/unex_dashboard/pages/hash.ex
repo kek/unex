@@ -4,6 +4,7 @@ defmodule Unex.Dashboard.Pages.Hash do
 
   alias Unex.Cluster.DepsCache
   alias Unex.Cluster.HashCache
+  alias Unex.Cluster.NameCache
   alias Unex.Cluster.SourceCache
   alias Unex.Services.Registry
 
@@ -182,7 +183,21 @@ defmodule Unex.Dashboard.Pages.Hash do
       )
 
     short = String.slice(hash, 0, 16)
-    ~s[<a href="#{h(url)}"><code>#{h(short)}…</code></a>]
+    label = ~s[<code>#{h(short)}…</code>]
+
+    case name_for(hash) do
+      nil -> ~s[<a href="#{h(url)}">#{label}</a>]
+      name -> ~s[<a href="#{h(url)}"><strong>#{h(name)}</strong> #{label}</a>]
+    end
+  end
+
+  defp name_for(hash) do
+    case NameCache.get(hash) do
+      {:ok, name} -> name
+      :not_found -> nil
+    end
+  catch
+    :exit, _ -> nil
   end
 
   defp h(s), do: s |> to_string() |> Phoenix.HTML.html_escape() |> Phoenix.HTML.safe_to_string()

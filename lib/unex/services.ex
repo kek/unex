@@ -132,6 +132,7 @@ defmodule Unex.Services do
         root_hash = HashCache.put(HashCache, root_value)
         maybe_cache_source(root_hash, Map.get(extract, :source))
         cache_term_sources(Map.get(extract, :term_sources, %{}))
+        cache_names(Map.get(extract, :names, %{}))
         cache_deps(root_hash, Map.get(extract, :deps, %{}))
         release(name, root_hash, project: project, entry_point: entry_point)
 
@@ -161,6 +162,12 @@ defmodule Unex.Services do
   defp cache_term_sources(map) when is_map(map) do
     Enum.each(map, fn {hash, source} ->
       Unex.Cluster.SourceCache.put(hash, source)
+    end)
+  end
+
+  defp cache_names(map) when is_map(map) do
+    Enum.each(map, fn {hash, name} ->
+      Unex.Cluster.NameCache.put(hash, name)
     end)
   end
 
