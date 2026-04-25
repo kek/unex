@@ -184,7 +184,10 @@ defmodule Unex.Runtime do
             end
 
             manifest_hashes = String.split(manifest, "\n", trim: true)
-            term_sources = collect_term_sources(ucm, codebase_path, manifest_hashes)
+            manifest_set = MapSet.new(manifest_hashes, &normalize_hash/1)
+
+            term_sources =
+              collect_named_term_sources(ucm, codebase_path, out_dir, manifest_set)
 
             Logger.info(
               "Runtime.extract: term_sources cached: #{map_size(term_sources)} of #{length(manifest_hashes)} manifest entries"
@@ -207,39 +210,159 @@ defmodule Unex.Runtime do
     end
   end
 
-  # Opens a second UCM session and runs `view #<hash>` for every hash in the
-  # manifest. Parses each view block and returns a map of
-  # `normalized_hash => source_text`. Failures are logged and swallowed —
-  # deploys still succeed on parser/timeout errors.
-  defp collect_term_sources(_ucm, _codebase_path, []), do: %{}
+  # Opens a fresh UCM session, enumerates every named term in the project's
+  # local namespace via `find`, looks up each name's runtime hash via a
+  # generated Unison program (`Link.Term.toText (termLink <name>)`), then
+  # `view`s each name and indexes the resulting source by hash. Returns
+  # `%{normalized_hash => source_text}` for every name whose hash appears
+  # in `manifest_set`.
+  #
+  # Why all this? UCM's `view #<hash>` only resolves hashes registered in
+  # the codebase's name map. The hashes we get from `Code.dependencies` are
+  # often bytecode-level sub-references (anonymous lambdas, component
+  # fragments) UCM can't address by hash — but every NAMED term in the
+  # project IS view-able by name. So we go name-first and join with the
+  # manifest by hash.
+  defp collect_named_term_sources(ucm, codebase_path, out_dir, %MapSet{} = manifest_set) do
+    names = enumerate_local_names(ucm, codebase_path)
+    Logger.info("Runtime.extract: enumerated #{length(names)} named terms in project")
 
-  defp collect_term_sources(ucm, codebase_path, hashes) when is_list(hashes) do
-    try do
-      port =
-        Port.open({:spawn_executable, ucm}, [
-          :binary,
-          :exit_status,
-          :stderr_to_stdout,
-          args: ["--codebase", codebase_path]
-        ])
+    if names == [] do
+      %{}
+    else
+      name_to_hash = lookup_name_hashes(ucm, codebase_path, out_dir, names)
 
-      view_commands =
-        hashes
-        |> Enum.map(fn h -> "view #{h}\n" end)
-        |> Enum.join()
+      Logger.info(
+        "Runtime.extract: resolved #{map_size(name_to_hash)}/#{length(names)} name → hash entries"
+      )
 
-      send(port, {self(), {:command, view_commands <> "exit\n"}})
-      views_output = collect_output(port, "", @compile_timeout)
+      # Keep only names whose hash is in the manifest — no point fetching
+      # source for terms the deployed Value doesn't actually depend on.
+      relevant =
+        name_to_hash
+        |> Enum.filter(fn {_name, hash} -> MapSet.member?(manifest_set, hash) end)
+        |> Map.new()
 
-      # Most manifest hashes are bytecode-level sub-references that UCM's
-      # `view` can't resolve (no entry in the name map) — parse_all_view_outputs
-      # filters those out via accept_block.
-      parse_all_view_outputs(views_output, hashes)
-    rescue
-      err ->
-        Logger.warning("Runtime.extract: second UCM session failed: #{inspect(err)}")
-        %{}
+      Logger.info(
+        "Runtime.extract: #{map_size(relevant)} of those names are reachable from the deploy"
+      )
+
+      sources_by_name = view_sources(ucm, codebase_path, Map.keys(relevant))
+
+      Enum.reduce(relevant, %{}, fn {name, hash}, acc ->
+        case Map.get(sources_by_name, name) do
+          nil -> acc
+          source -> Map.put(acc, hash, source)
+        end
+      end)
     end
+  rescue
+    err ->
+      Logger.warning("Runtime.extract: collect_named_term_sources failed: #{inspect(err)}")
+      %{}
+  end
+
+  defp enumerate_local_names(ucm, codebase_path) do
+    output = run_ucm(ucm, codebase_path, "find\n")
+
+    output
+    |> ucm_output_blocks()
+    |> Enum.flat_map(&parse_find_block/1)
+    |> Enum.uniq()
+  end
+
+  # Parses lines from a `find` block. Lines look like:
+  #   "1.  Unex.Dispatcher.err : Text ->{Exception} Bytes"
+  #   "2.  counter.html : Nat -> Text"
+  # Multi-line type signatures wrap with leading whitespace; we only pick up
+  # lines where the digit-prefix appears.
+  defp parse_find_block(block) do
+    block
+    |> String.split("\n")
+    |> Enum.flat_map(fn line ->
+      case Regex.run(~r/^\s*\d+\.\s+([\w.!'+\-*\/<>=?@$%^&|~]+)\s*:/u, line) do
+        [_, name] -> [name]
+        _ -> []
+      end
+    end)
+  end
+
+  defp lookup_name_hashes(ucm, codebase_path, out_dir, names) do
+    dump_path = Path.join(out_dir, "_namedump.u")
+    File.write!(dump_path, namedump_source(names))
+
+    cmd = "load #{dump_path}\nrun Unex.NameDump.dump\n"
+    output = run_ucm(ucm, codebase_path, cmd)
+
+    parse_namedump_output(output)
+  end
+
+  defp namedump_source(names) do
+    body =
+      names
+      |> Enum.map(fn n ->
+        ~s|        printLine ("#{escape_for_unison(n)}\\t" Text.++ Link.Term.toText (termLink #{n}))|
+      end)
+      |> Enum.join("\n")
+
+    """
+    Unex.NameDump.dump : '{IO, Exception} ()
+    Unex.NameDump.dump = do
+    #{body}
+    """
+  end
+
+  defp escape_for_unison(s) do
+    s
+    |> String.replace("\\", "\\\\")
+    |> String.replace("\"", "\\\"")
+  end
+
+  defp parse_namedump_output(output) do
+    output
+    |> sanitize_terminal_bytes()
+    |> String.split("\n")
+    |> Enum.flat_map(fn line ->
+      case Regex.run(~r/^([\w.!'+\-*\/<>=?@$%^&|~]+)\t#?([a-z0-9]+)$/iu, String.trim(line)) do
+        [_, name, hash] -> [{name, normalize_hash(hash)}]
+        _ -> []
+      end
+    end)
+    |> Map.new()
+  end
+
+  defp view_sources(_ucm, _codebase_path, []), do: %{}
+
+  defp view_sources(ucm, codebase_path, names) do
+    cmd =
+      names
+      |> Enum.map(fn n -> "view #{n}\n" end)
+      |> Enum.join()
+
+    output = run_ucm(ucm, codebase_path, cmd)
+    blocks = ucm_output_blocks(output)
+
+    names
+    |> Enum.zip(blocks)
+    |> Enum.reduce(%{}, fn {name, block}, acc ->
+      case accept_block(block) do
+        nil -> acc
+        source -> Map.put(acc, name, source)
+      end
+    end)
+  end
+
+  defp run_ucm(ucm, codebase_path, command_string) do
+    port =
+      Port.open({:spawn_executable, ucm}, [
+        :binary,
+        :exit_status,
+        :stderr_to_stdout,
+        args: ["--codebase", codebase_path]
+      ])
+
+    send(port, {self(), {:command, command_string <> "exit\n"}})
+    collect_output(port, "", @compile_timeout)
   end
 
   @doc false

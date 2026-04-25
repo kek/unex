@@ -1,7 +1,7 @@
 #!/usr/bin/env elixir
 
-# Probe UCM for the right command to resolve a hash in our runtime codebase.
-# Usage: mix run --no-start scripts/probe_view.exs <hash>
+# Probe UCM commands that go from a NAME to a hash, or list names+hashes.
+# Usage: mix run --no-start scripts/probe_view.exs
 
 defmodule Probe do
   def collect(port, acc) do
@@ -35,34 +35,46 @@ defmodule Probe do
 
     for {block, i} <- Enum.with_index(blocks) do
       IO.puts("--- block #{i} (#{byte_size(block)} bytes) ---")
-      IO.puts(String.slice(block, 0, 600))
+      IO.puts(String.slice(block, 0, 800))
     end
   end
 end
 
-[hash | _] = System.argv()
-IO.puts("Probing hash: #{hash}")
-
 {:ok, ucm} = Unex.UCM.find()
 codebase_path = Path.expand(Path.join("data", "runtime_codebase"))
 
+# These commands should accept a NAME and return information including hash.
 commands = [
-  {"find #hash", "find #{hash}\n"},
-  {"ls current", "ls\n"},
-  {"cd runtime && ls", "cd runtime\nls\n"},
-  {"help view", "help view\n"},
-  {"view bare", "view #{hash}\n"},
-  {"project.switch runtime/main then view", "project.switch runtime/main\nview #{hash}\n"},
-  {"project.switch @kek/counter/main then view",
-   "project.switch @kek/counter/main\nview #{hash}\n"},
-  {"display bare", "display #{hash}\n"},
-  {"project.switch runtime/main then display", "project.switch runtime/main\ndisplay #{hash}\n"},
-  {"names bare", "names #{hash}\n"},
-  {"names.global bare", "names.global #{hash}\n"},
-  {"dependencies", "dependencies #{hash}\n"},
-  {"view with .0 suffix", "view #{hash}.0\n"},
-  {"edit.hash", "edit.hash #{hash}\n"}
+  {"names mainCounter", "names mainCounter\n"},
+  {"alias.list mainCounter", "alias.list mainCounter\n"},
+  {"hashqualified mainCounter", "hashqualified mainCounter\n"},
+  {"view mainCounter", "view mainCounter\n"},
+  {"view.hash mainCounter", "view.hash mainCounter\n"},
+  {"display mainCounter", "display mainCounter\n"},
+  {"dependents mainCounter", "dependents mainCounter\n"},
+  {"dependencies mainCounter", "dependencies mainCounter\n"},
+  {"debug.numberedArgs", "view mainCounter\ndebug.numberedArgs\n"},
+  {"debug.dump-namespace", "debug.dump-namespace\n"},
+  {"help find", "help find\n"},
+  {"help debug", "help debug\n"},
+  {"find.verbose mainCounter", "find.verbose mainCounter\n"},
+  {"reflog", "reflog\n"},
+  {"history", "history\n"},
+  # UCM transcript-style: tries to find the term by a fragment.
+  {"find mainCounter", "find mainCounter\n"},
+  # The hash of the entry we know works:
+  {"view #2u7l1...", "view #2u7l1\n"},
+  # And: try getting the hash via Unison code by termLink:
+  {"load termlink probe", "load /tmp/probe_termlink.u\nrun probe.dumpHash\n"}
 ]
+
+# Generate a tiny .u that emits the hash of mainCounter:
+File.write!("/tmp/probe_termlink.u", """
+probe.dumpHash : '{IO, Exception} ()
+probe.dumpHash = do
+  ref = termLink mainCounter
+  printLine ("HASH=" Text.++ Link.Term.toText ref)
+""")
 
 for {label, cmd} <- commands do
   Probe.try_cmd(ucm, codebase_path, label, cmd)
