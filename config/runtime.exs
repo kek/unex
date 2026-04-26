@@ -118,10 +118,30 @@ if config_env() != :test do
         |> List.to_tuple()
     end
 
+  dashboard_url = get.("UNEX_DASHBOARD_URL", :dashboard_url, nil)
+
+  url_opts =
+    case dashboard_url && URI.parse(dashboard_url) do
+      %URI{host: host, scheme: scheme} when is_binary(host) ->
+        port = (scheme == "https" && 443) || 80
+        [host: host, scheme: scheme, port: port]
+
+      _ ->
+        []
+    end
+
+  check_origin =
+    case dashboard_url do
+      url when is_binary(url) -> [url]
+      _ -> false
+    end
+
   config :unex, Unex.Dashboard.Endpoint,
     adapter: Bandit.PhoenixAdapter,
     http: [ip: dashboard_host, port: get_int.("UNEX_DASHBOARD_PORT", :dashboard_port, 4041)],
     server: dashboard_enabled,
+    url: url_opts,
+    check_origin: check_origin,
     secret_key_base:
       System.get_env("UNEX_DASHBOARD_SECRET") ||
         :crypto.hash(:sha256, "unex-dashboard-default-#{node()}") |> Base.encode16()
