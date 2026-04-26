@@ -105,6 +105,8 @@ defmodule Unex.Runtime do
         {:error, "invalid entry_point: #{inspect(entry_point)}"}
 
       true ->
+        Logger.info("Runtime.extract: starting #{project}/#{entry_point}")
+        t_start = :os.system_time(:millisecond)
         {:ok, ucm} = Unex.UCM.find()
         unique = "#{:erlang.phash2(entry_point)}_#{:os.system_time(:millisecond)}"
         out_dir = Path.join(System.tmp_dir!(), "unex_extract_#{unique}")
@@ -121,6 +123,9 @@ defmodule Unex.Runtime do
             "view #{entry_point}\n" <>
             "exit\n"
 
+        Logger.info("Runtime.extract: stage 1/3 — pulling project + walking deps")
+        t_walk_start = :os.system_time(:millisecond)
+
         port =
           Port.open({:spawn_executable, ucm}, [
             :binary,
@@ -131,6 +136,10 @@ defmodule Unex.Runtime do
 
         send(port, {self(), {:command, commands}})
         output = collect_output(port, "", @compile_timeout)
+
+        Logger.info(
+          "Runtime.extract: stage 1/3 done in #{:os.system_time(:millisecond) - t_walk_start}ms"
+        )
 
         root_path = Path.join(out_dir, "root.value")
 
@@ -182,11 +191,18 @@ defmodule Unex.Runtime do
             manifest_hashes = String.split(manifest, "\n", trim: true)
             manifest_set = MapSet.new(manifest_hashes, &normalize_hash/1)
 
+            Logger.info("Runtime.extract: stage 2/3 — enumerating + resolving names")
+            t_names_start = :os.system_time(:millisecond)
+
             %{sources: term_sources, names: hash_to_name} =
               collect_named_term_sources(ucm, codebase_path, out_dir, manifest_set)
 
             Logger.info(
-              "Runtime.extract: term_sources cached: #{map_size(term_sources)} of #{length(manifest_hashes)} manifest entries"
+              "Runtime.extract: stage 2-3 done in #{:os.system_time(:millisecond) - t_names_start}ms — term_sources cached: #{map_size(term_sources)} of #{length(manifest_hashes)} manifest entries"
+            )
+
+            Logger.info(
+              "Runtime.extract: #{project}/#{entry_point} complete in #{:os.system_time(:millisecond) - t_start}ms"
             )
 
             {:ok,
@@ -221,16 +237,21 @@ defmodule Unex.Runtime do
   # project IS view-able by name. So we go name-first and join with the
   # manifest by hash.
   defp collect_named_term_sources(ucm, codebase_path, out_dir, %MapSet{} = manifest_set) do
+    t_enum = :os.system_time(:millisecond)
     names = enumerate_local_names(ucm, codebase_path)
-    Logger.info("Runtime.extract: enumerated #{length(names)} named terms in project")
+
+    Logger.info(
+      "Runtime.extract: enumerated #{length(names)} named terms in project (#{:os.system_time(:millisecond) - t_enum}ms)"
+    )
 
     if names == [] do
       %{sources: %{}, names: %{}}
     else
+      t_dump = :os.system_time(:millisecond)
       name_to_hash = lookup_name_hashes(ucm, codebase_path, out_dir, names)
 
       Logger.info(
-        "Runtime.extract: resolved #{map_size(name_to_hash)}/#{length(names)} name → hash entries"
+        "Runtime.extract: resolved #{map_size(name_to_hash)}/#{length(names)} name → hash entries (#{:os.system_time(:millisecond) - t_dump}ms)"
       )
 
       # Keep only names whose hash is in the manifest — no point fetching
@@ -247,10 +268,30 @@ defmodule Unex.Runtime do
       hash_to_name =
         Enum.reduce(relevant, %{}, fn {name, hash}, acc -> Map.put(acc, hash, name) end)
 
-      sources_by_name = view_sources(ucm, codebase_path, Map.keys(relevant))
+      # Skip names whose hash is already in SourceCache from a prior deploy —
+      # the source is content-addressed by hash, so re-viewing is wasted work.
+      already_cached = source_cache_keys()
+
+      to_view =
+        relevant
+        |> Enum.reject(fn {_name, hash} -> MapSet.member?(already_cached, hash) end)
+        |> Map.new()
+
+      skipped = map_size(relevant) - map_size(to_view)
+
+      Logger.info(
+        "Runtime.extract: stage 3/3 — viewing #{map_size(to_view)} new sources (#{skipped} already cached)"
+      )
+
+      t_view = :os.system_time(:millisecond)
+      sources_by_name = view_sources(ucm, codebase_path, Map.keys(to_view))
+
+      Logger.info(
+        "Runtime.extract: stage 3/3 done in #{:os.system_time(:millisecond) - t_view}ms — got source for #{map_size(sources_by_name)}/#{map_size(to_view)} names"
+      )
 
       sources =
-        Enum.reduce(relevant, %{}, fn {name, hash}, acc ->
+        Enum.reduce(to_view, %{}, fn {name, hash}, acc ->
           case Map.get(sources_by_name, name) do
             nil -> acc
             source -> Map.put(acc, hash, source)
@@ -263,6 +304,12 @@ defmodule Unex.Runtime do
     err ->
       Logger.warning("Runtime.extract: collect_named_term_sources failed: #{inspect(err)}")
       %{sources: %{}, names: %{}}
+  end
+
+  defp source_cache_keys do
+    Unex.Cluster.SourceCache.keys()
+  catch
+    :exit, _ -> MapSet.new()
   end
 
   # Per-subnamespace name cap. Lib subnamespaces (lib.base, lib.kek_unex_*)

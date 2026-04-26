@@ -26,4 +26,11 @@ defmodule Unex.Cluster.SourceCacheTest do
     assert :ok = SourceCache.put(cache, hash, "v2")
     assert {:ok, "v2"} = SourceCache.get(cache, hash)
   end
+
+  test "keys/1 returns a MapSet of every cached hash", %{cache: cache} do
+    assert SourceCache.keys(cache) == MapSet.new()
+    :ok = SourceCache.put(cache, "h1", "src1")
+    :ok = SourceCache.put(cache, "h2", "src2")
+    assert SourceCache.keys(cache) == MapSet.new(["h1", "h2"])
+  end
 end

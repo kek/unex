@@ -29,6 +29,16 @@ defmodule Unex.Cluster.SourceCache do
     end
   end
 
+  @doc """
+  Returns a `MapSet` of all hashes currently cached. One GenServer call,
+  cheap to materialize — call it once then test membership locally
+  instead of round-tripping per hash.
+  """
+  def keys(server \\ __MODULE__) do
+    table = GenServer.call(server, :table)
+    table |> :ets.tab2list() |> Stream.map(&elem(&1, 0)) |> MapSet.new()
+  end
+
   @doc "Clears the cache. Used by integration tests that re-deploy."
   def clear(server \\ __MODULE__), do: GenServer.call(server, :clear)
 
