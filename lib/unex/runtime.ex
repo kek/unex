@@ -10,7 +10,11 @@ defmodule Unex.Runtime do
 
   require Logger
 
-  @compile_timeout 120_000
+  # Single deploy currently runs ~50–70s end-to-end (extractor walk,
+  # name-hash dump, per-name view source). Concurrent deploys serialize
+  # through this GenServer, so the queued-caller budget needs to fit a
+  # few stacked deploys before the call times out.
+  @compile_timeout 600_000
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
