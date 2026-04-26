@@ -7,8 +7,6 @@ defmodule Unex.Integration.UnisonAbilitiesTest do
   """
   use ExUnit.Case, async: false
 
-  @test_port 4042
-
   setup_all do
     # 1. Init Mnesia for storage + config
     #    (Scratch and Log GenServers are already started by the application supervisor)
@@ -21,8 +19,12 @@ defmodule Unex.Integration.UnisonAbilitiesTest do
     File.mkdir_p!(mnesia_dir)
     Unex.Storage.Schema.init(mnesia_dir)
 
-    # 2. Start Bandit on a test port
-    {:ok, bandit_pid} = Bandit.start_link(plug: Unex.API.Router, port: @test_port)
+    # 2. Bandit on an ephemeral localhost port — avoids colliding with a
+    # running dev server holding 127.0.0.1 on a hard-coded port.
+    {:ok, bandit_pid} =
+      Bandit.start_link(plug: Unex.API.Router, port: 0, ip: {127, 0, 0, 1})
+
+    {:ok, {_addr, port}} = ThousandIsland.listener_info(bandit_pid)
 
     on_exit(fn ->
       Process.exit(bandit_pid, :normal)
@@ -30,7 +32,7 @@ defmodule Unex.Integration.UnisonAbilitiesTest do
       File.rm_rf!(mnesia_dir)
     end)
 
-    {:ok, port: @test_port}
+    {:ok, port: port}
   end
 
   defp test_secret, do: Application.get_env(:unex, :api_secret)

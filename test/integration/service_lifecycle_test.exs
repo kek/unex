@@ -22,7 +22,6 @@ defmodule Unex.Integration.ServiceLifecycleTest do
   @moduletag :integration
   @moduletag timeout: 600_000
 
-  @test_port 4044
   @dispatcher_uc "data/dispatcher.uc"
 
   setup_all do
@@ -40,11 +39,17 @@ defmodule Unex.Integration.ServiceLifecycleTest do
     File.mkdir_p!(mnesia_dir)
     Unex.Storage.Schema.init(mnesia_dir)
 
-    # Point dispatcher's UNEX_URL env at the test port before starting it.
-    old_api_port = Application.get_env(:unex, :api_port)
-    Application.put_env(:unex, :api_port, @test_port)
+    # Bandit on an ephemeral localhost port. Dispatcher reads :api_port
+    # to build its callback URL, so set it AFTER we know the assigned
+    # port, before starting the dispatcher.
+    {:ok, bandit_pid} =
+      Bandit.start_link(plug: Unex.API.Router, port: 0, ip: {127, 0, 0, 1})
 
-    {:ok, bandit_pid} = Bandit.start_link(plug: Unex.API.Router, port: @test_port)
+    {:ok, {_addr, port}} = ThousandIsland.listener_info(bandit_pid)
+
+    old_api_port = Application.get_env(:unex, :api_port)
+    Application.put_env(:unex, :api_port, port)
+
     {:ok, dispatcher_pid} = Unex.Dispatcher.start_link()
 
     on_exit(fn ->
@@ -60,7 +65,7 @@ defmodule Unex.Integration.ServiceLifecycleTest do
       end
     end)
 
-    {:ok, port: @test_port}
+    {:ok, port: port}
   end
 
   test "deploy @kek/counter from Unison Share, call /web, get rendered HTML",

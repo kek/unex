@@ -10,8 +10,6 @@ defmodule Unex.Integration.UnisonExamplesTest do
 
   @moduletag :integration
 
-  @test_port 4043
-
   setup_all do
     mnesia_dir =
       Path.join(
@@ -22,7 +20,11 @@ defmodule Unex.Integration.UnisonExamplesTest do
     File.mkdir_p!(mnesia_dir)
     Unex.Storage.Schema.init(mnesia_dir)
 
-    {:ok, bandit_pid} = Bandit.start_link(plug: Unex.API.Router, port: @test_port)
+    # Ephemeral localhost port — see unison_storage_test for rationale.
+    {:ok, bandit_pid} =
+      Bandit.start_link(plug: Unex.API.Router, port: 0, ip: {127, 0, 0, 1})
+
+    {:ok, {_addr, port}} = ThousandIsland.listener_info(bandit_pid)
 
     on_exit(fn ->
       Process.exit(bandit_pid, :normal)
@@ -30,7 +32,7 @@ defmodule Unex.Integration.UnisonExamplesTest do
       File.rm_rf!(mnesia_dir)
     end)
 
-    {:ok, port: @test_port}
+    {:ok, port: port}
   end
 
   defp project_root, do: Path.join(__DIR__, "../..") |> Path.expand()
