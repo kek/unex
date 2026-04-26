@@ -5,8 +5,6 @@ defmodule Unex.Integration.UnisonStorageTest do
   """
   use ExUnit.Case, async: false
 
-  @test_port 4041
-
   setup_all do
     # 1. Init Mnesia for storage
     mnesia_dir =
@@ -18,8 +16,14 @@ defmodule Unex.Integration.UnisonStorageTest do
     File.mkdir_p!(mnesia_dir)
     Unex.Storage.Schema.init(mnesia_dir)
 
-    # 2. Start Bandit on a test port
-    {:ok, bandit_pid} = Bandit.start_link(plug: Unex.API.Router, port: @test_port)
+    # 2. Start Bandit on an OS-assigned ephemeral port bound to localhost.
+    # Hard-coded ports collided with a running dev `mix unex.start` that
+    # held 127.0.0.1:4041 for the dashboard, silently routing test
+    # requests there.
+    {:ok, bandit_pid} =
+      Bandit.start_link(plug: Unex.API.Router, port: 0, ip: {127, 0, 0, 1})
+
+    {:ok, {_addr, port}} = ThousandIsland.listener_info(bandit_pid)
 
     on_exit(fn ->
       Process.exit(bandit_pid, :normal)
@@ -27,7 +31,7 @@ defmodule Unex.Integration.UnisonStorageTest do
       File.rm_rf!(mnesia_dir)
     end)
 
-    {:ok, port: @test_port}
+    {:ok, port: port}
   end
 
   @tag timeout: 300_000
