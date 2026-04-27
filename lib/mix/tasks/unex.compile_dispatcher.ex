@@ -10,8 +10,14 @@ defmodule Mix.Tasks.Unex.CompileDispatcher do
     2. Load `unison/Unex/Dispatcher.u` into the codebase.
     3. `compile Unex.Dispatcher.main <out>` — writes `<out>.uc`.
 
-  Output path defaults to `$UNEX_DATA/dispatcher.uc` (where UNEX_DATA defaults
-  to `./data`). Override with `--out <path>`.
+  Output path resolution (first match wins):
+
+    * `--out <path>` flag (must end in `.uc`)
+    * `UNEX_DISPATCHER` env var (must end in `.uc`)
+    * `$UNEX_DATA/dispatcher.uc` (where UNEX_DATA defaults to `./data`)
+
+  The runtime reads `UNEX_DISPATCHER` too, so setting it once lets the same
+  shared binary be compiled and consumed by every node.
   """
 
   use Mix.Task
@@ -26,7 +32,7 @@ defmodule Mix.Tasks.Unex.CompileDispatcher do
 
     data_dir = System.get_env("UNEX_DATA", "data")
     codebase = Path.join(data_dir, "runtime_codebase") |> Path.expand()
-    out_path = Keyword.get(opts, :out, Path.join(data_dir, "dispatcher") |> Path.expand())
+    out_path = resolve_out_path(opts, data_dir)
 
     unless File.exists?(@dispatcher_src) do
       Mix.raise("Dispatcher source not found at #{@dispatcher_src}")
@@ -63,6 +69,29 @@ defmodule Mix.Tasks.Unex.CompileDispatcher do
       Mix.shell().info("Wrote #{uc} (#{File.stat!(uc).size} bytes)")
     else
       Mix.raise("ucm compile did not produce #{uc} — check output above")
+    end
+  end
+
+  # ucm's `compile` takes the path WITHOUT the `.uc` extension and appends it
+  # itself. We accept fully-qualified `.uc` paths externally so users can copy
+  # the same value into `UNEX_DISPATCHER` for the runtime, then strip `.uc`
+  # before handing it to ucm.
+  defp resolve_out_path(opts, data_dir) do
+    raw =
+      Keyword.get(opts, :out) ||
+        System.get_env("UNEX_DISPATCHER") ||
+        Path.join(data_dir, "dispatcher.uc")
+
+    raw
+    |> Path.expand()
+    |> strip_uc_suffix()
+  end
+
+  defp strip_uc_suffix(path) do
+    case Path.extname(path) do
+      ".uc" -> Path.rootname(path)
+      "" -> path
+      other -> Mix.raise("dispatcher output path must end in .uc, got #{other}: #{path}")
     end
   end
 

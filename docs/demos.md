@@ -30,12 +30,23 @@ project pushed.
 
 ### Setup (before the audience arrives)
 
-1. Start three nodes on the same machine with different data dirs.
-   `UNEX_PORT` is the API port; the dashboard (if enabled) defaults to
-   `4041`, so don't reuse `4041` as another node's API port — pick API
-   ports with a gap and assign each dashboard its own port. Use
-   long-name BEAM nodes (`a@localhost`, not bare `a`) so peer addresses
-   match what the runtime actually registers:
+1. Pick a shared dispatcher path and build it once. The cluster nodes
+   each use a per-node `UNEX_DATA`, so the dispatcher binary needs to
+   live somewhere all three can read. Both the compile task and the
+   runtime read `UNEX_DISPATCHER`, so set it once and reuse it:
+   ```
+   export UNEX_DISPATCHER=$PWD/dispatcher.uc
+   mix unex.compile_dispatcher
+   ```
+   Confirm the file exists at `$UNEX_DISPATCHER` before continuing.
+
+2. With `UNEX_DISPATCHER` exported in your shell from step 1, start
+   three nodes on the same machine with different data dirs. `UNEX_PORT`
+   is the API port; the dashboard (if enabled) defaults to `4041`, so
+   don't reuse `4041` as another node's API port — pick API ports with
+   a gap and assign each dashboard its own port. Use long-name BEAM
+   nodes (`a@localhost`, not bare `a`) so peer addresses match what the
+   runtime actually registers:
    ```
    UNEX_NODE=a@localhost UNEX_PORT=4040 UNEX_DASHBOARD=1 UNEX_DASHBOARD_PORT=5040 \
      UNEX_DATA=./data/a UNEX_COOKIE=demo mix unex.start
@@ -48,7 +59,7 @@ project pushed.
    ```
    The dashboard is opt-in. If you only want it on node A, drop
    `UNEX_DASHBOARD=1` (and `UNEX_DASHBOARD_PORT`) from B and C.
-2. Have a UCM window open on your Unison project with a small service ready to
+3. Have a UCM window open on your Unison project with a small service ready to
    push — a greeter function is enough:
    ```
    greeter : '{Unex.Storage, IO, Exception} ()
