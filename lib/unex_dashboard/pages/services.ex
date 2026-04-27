@@ -46,13 +46,20 @@ defmodule Unex.Dashboard.Pages.Services do
     end
   end
 
-  defp format({:registered, name, hash, node}),
+  defp format(event), do: "#{now_stamp()} #{format_event(event)}"
+
+  defp now_stamp do
+    DateTime.utc_now()
+    |> Calendar.strftime("%H:%M:%S")
+  end
+
+  defp format_event({:registered, name, hash, node}),
     do: "[registered] #{name} → #{String.slice(hash, 0, 10)}… on #{inspect(node)}"
 
-  defp format({:unregistered, name}), do: "[unregistered] #{name}"
-  defp format({:call_started, name, node}), do: "[call start] #{name} on #{inspect(node)}"
-  defp format({:call_finished, name, node}), do: "[call end]   #{name} on #{inspect(node)}"
-  defp format(other), do: inspect(other)
+  defp format_event({:unregistered, name}), do: "[unregistered] #{name}"
+  defp format_event({:call_started, name, node}), do: "[call start] #{name} on #{inspect(node)}"
+  defp format_event({:call_finished, name, node}), do: "[call end]   #{name} on #{inspect(node)}"
+  defp format_event(other), do: inspect(other)
 
   @impl true
   def render(assigns) do
