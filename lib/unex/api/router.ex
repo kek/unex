@@ -91,10 +91,6 @@ defmodule Unex.API.Router do
 
   # Services routes
 
-  get "/services/:name/web" do
-    ServicesController.web(conn, name)
-  end
-
   post "/services/:name/deploy" do
     ServicesController.deploy(conn, name)
   end
@@ -159,6 +155,11 @@ defmodule Unex.API.Router do
 
   get "/log/recent/:n" do
     LogController.recent(conn, n)
+  end
+
+  # Service web endpoint — kept last so specific routes above take precedence.
+  get "/:name" do
+    ServicesController.web(conn, name)
   end
 
   match _ do

@@ -32,7 +32,7 @@ defmodule Unex.Dashboard.Pages.Services do
   end
 
   defp endpoint_url(name) do
-    "#{api_base_url()}/services/#{URI.encode(name)}/web"
+    "#{api_base_url()}/#{URI.encode(name)}"
   end
 
   defp api_base_url do
@@ -88,7 +88,7 @@ defmodule Unex.Dashboard.Pages.Services do
             <td>{Calendar.strftime(s.deployed_at, "%H:%M:%S")}</td>
             <td>
               <a href={endpoint_url(s.name)} target="_blank" rel="noopener">
-                /services/{s.name}/web ↗
+                /{s.name} ↗
               </a>
             </td>
             <td>

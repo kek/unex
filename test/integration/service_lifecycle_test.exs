@@ -5,7 +5,7 @@ defmodule Unex.Integration.ServiceLifecycleTest do
     1. Pull a real Unison project (`@kek/counter`) from Unison Share.
     2. Extract the entry point into serialized Value + transitive Code bytes.
     3. Register the service in the cluster.
-    4. Fetch `/services/counter/web` as a plain HTTP client.
+    4. Fetch `/counter` as a plain HTTP client.
     5. Assert the rendered HTML comes back through the dispatcher.
 
   The test requires:
@@ -68,7 +68,7 @@ defmodule Unex.Integration.ServiceLifecycleTest do
     {:ok, port: port}
   end
 
-  test "deploy @kek/counter from Unison Share, call /web, get rendered HTML",
+  test "deploy @kek/counter from Unison Share, call /counter, get rendered HTML",
        %{port: port} do
     secret = Application.get_env(:unex, :api_secret)
 
@@ -93,11 +93,11 @@ defmodule Unex.Integration.ServiceLifecycleTest do
     assert is_binary(deploy_json["hash"])
     assert String.length(deploy_json["hash"]) == 64
 
-    # ---- Fetch /web ----
+    # ---- Fetch /counter ----
     {web_status, web_headers, web_body} =
       http_request(port,
         method: "GET",
-        path: "/services/counter/web",
+        path: "/counter",
         headers: [{"authorization", "Bearer #{secret}"}],
         timeout: 120_000
       )
@@ -114,7 +114,7 @@ defmodule Unex.Integration.ServiceLifecycleTest do
            end),
            "expected text/html content-type, got: #{inspect(web_headers)}"
 
-    # ---- Fetch /web again, verify counter incremented ----
+    # ---- Fetch /counter again, verify counter incremented ----
     first_n =
       Regex.run(~r|<h1>Visitor #(\d+)</h1>|, web_body)
       |> List.last()
@@ -123,7 +123,7 @@ defmodule Unex.Integration.ServiceLifecycleTest do
     {200, _, web_body_2} =
       http_request(port,
         method: "GET",
-        path: "/services/counter/web",
+        path: "/counter",
         headers: [{"authorization", "Bearer #{secret}"}],
         timeout: 120_000
       )
