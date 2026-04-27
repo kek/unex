@@ -82,6 +82,7 @@ if config_env() != :test do
   # --- Apply config ---
   config :unex,
     api_port: get_int.("UNEX_PORT", :api_port, 4040),
+    api_url: get.("UNEX_API_URL", :api_url, nil),
     mnesia_dir: Path.join(data_dir, "mnesia"),
     blobs_dir: Path.join(data_dir, "blobs"),
     config_encryption_key: encryption_key,

@@ -31,6 +31,21 @@ defmodule Unex.Dashboard.Pages.Services do
     :exit, _ -> []
   end
 
+  defp endpoint_url(name) do
+    "#{api_base_url()}/services/#{URI.encode(name)}/web"
+  end
+
+  defp api_base_url do
+    case Application.get_env(:unex, :api_url) do
+      url when is_binary(url) and url != "" ->
+        String.trim_trailing(url, "/")
+
+      _ ->
+        port = Application.get_env(:unex, :api_port, 4040)
+        "http://localhost:#{port}"
+    end
+  end
+
   defp format({:registered, name, hash, node}),
     do: "[registered] #{name} → #{String.slice(hash, 0, 10)}… on #{inspect(node)}"
 
@@ -45,7 +60,14 @@ defmodule Unex.Dashboard.Pages.Services do
     <.card title="Deployed services">
       <table :if={@services != []} class="table">
         <thead>
-          <tr><th>Name</th><th>Hash</th><th>Node</th><th>Deployed</th><th>Source</th></tr>
+          <tr>
+            <th>Name</th>
+            <th>Hash</th>
+            <th>Node</th>
+            <th>Deployed</th>
+            <th>Endpoint</th>
+            <th>Source</th>
+          </tr>
         </thead>
         <tbody>
           <tr :for={s <- @services}>
@@ -57,6 +79,11 @@ defmodule Unex.Dashboard.Pages.Services do
             </td>
             <td>{inspect(s.node)}</td>
             <td>{Calendar.strftime(s.deployed_at, "%H:%M:%S")}</td>
+            <td>
+              <a href={endpoint_url(s.name)} target="_blank" rel="noopener">
+                /services/{s.name}/web ↗
+              </a>
+            </td>
             <td>
               <%= case Unex.Dashboard.SourceLink.build(s.project, s.entry_point) do %>
                 <% nil -> %>
