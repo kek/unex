@@ -27,8 +27,11 @@ defmodule Unex.API.Auth do
 
   defp service_name(_), do: :no
 
+  # Use resolve (local + peer fallback) so the auth bypass matches the
+  # service-reachability semantics: any node that can serve `/<name>`
+  # via the dispatcher should also let the request through unauthenticated.
   defp service_registered?(name) do
-    case Unex.Services.Registry.lookup(name) do
+    case Unex.Services.Registry.resolve(name) do
       {:ok, _} -> true
       :not_found -> false
     end
