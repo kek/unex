@@ -42,7 +42,9 @@ defmodule Unex.MixProject do
       {:phoenix_live_dashboard, "~> 0.8"},
       {:phoenix_pubsub, "~> 2.1"},
       {:telemetry_metrics, "~> 1.0"},
-      {:telemetry_poller, "~> 1.1"}
+      {:telemetry_poller, "~> 1.1"},
+      {:phoenix_live_reload, "~> 1.5", only: :dev},
+      {:exsync, "~> 0.4", only: :dev}
     ]
   end
 end

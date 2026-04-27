@@ -13,6 +13,11 @@ defmodule Unex.Dashboard.Endpoint do
     longpoll: [connect_info: [session: @session_options]]
   )
 
+  if Application.compile_env(:unex, [__MODULE__, :live_reload]) do
+    socket("/phoenix/live_reload/socket", Phoenix.LiveReloader.Socket)
+    plug(Phoenix.LiveReloader)
+  end
+
   plug(Phoenix.LiveDashboard.RequestLogger,
     param_key: "request_logger",
     cookie_key: "request_logger"

@@ -98,6 +98,11 @@ defmodule Mix.Tasks.Unex.Start do
     File.mkdir_p!(config.blobs_dir)
     Mix.Task.run("app.start")
 
+    if Mix.env() == :dev and Code.ensure_loaded?(ExSync) do
+      {:ok, _} = Application.ensure_all_started(:exsync)
+      IO.puts("[unex] code reloader (exsync) running")
+    end
+
     port = config.api_port
     IO.puts("[unex] API listening on http://localhost:#{port}")
     IO.puts("[unex] Press Ctrl+C to stop")
