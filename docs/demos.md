@@ -30,12 +30,22 @@ project pushed.
 
 ### Setup (before the audience arrives)
 
-1. Start three nodes on the same machine with different data dirs:
+1. Start three nodes on the same machine with different data dirs.
+   `UNEX_PORT` is the API port; the dashboard (if enabled) defaults to
+   `4041`, so don't reuse `4041` as another node's API port — pick API
+   ports with a gap and assign each dashboard its own port:
    ```
-   UNEX_NODE=a UNEX_PORT=4040 UNEX_DATA=./data-a UNEX_COOKIE=demo mix unex.start
-   UNEX_NODE=b UNEX_PORT=4041 UNEX_DATA=./data-b UNEX_COOKIE=demo UNEX_PEERS=a@localhost mix unex.start
-   UNEX_NODE=c UNEX_PORT=4042 UNEX_DATA=./data-c UNEX_COOKIE=demo UNEX_PEERS=a@localhost mix unex.start
+   UNEX_NODE=a UNEX_PORT=4040 UNEX_DASHBOARD=1 UNEX_DASHBOARD_PORT=5040 \
+     UNEX_DATA=./data/a UNEX_COOKIE=demo mix unex.start
+
+   UNEX_NODE=b UNEX_PORT=4050 UNEX_DASHBOARD=1 UNEX_DASHBOARD_PORT=5050 \
+     UNEX_DATA=./data/b UNEX_COOKIE=demo UNEX_PEERS=a@localhost mix unex.start
+
+   UNEX_NODE=c UNEX_PORT=4060 UNEX_DASHBOARD=1 UNEX_DASHBOARD_PORT=5060 \
+     UNEX_DATA=./data/c UNEX_COOKIE=demo UNEX_PEERS=a@localhost mix unex.start
    ```
+   The dashboard is opt-in. If you only want it on node A, drop
+   `UNEX_DASHBOARD=1` (and `UNEX_DASHBOARD_PORT`) from B and C.
 2. Have a UCM window open on your Unison project with a small service ready to
    push — a greeter function is enough:
    ```
@@ -103,8 +113,7 @@ project pushed.
 
 - Node running on `:4040`.
 - UCM open, project ready to `push`.
-- Browser window showing `http://localhost:4040/services/counter/web` (currently
-  404).
+- Browser window showing `http://localhost:4040/counter` (currently 404).
 
 ### Script
 
@@ -157,8 +166,8 @@ project pushed.
    **[BEAT]**
 
 5. **[SCREEN]** Slide: "The deploy artifact is the function."
-   **[SAY]** "If you have three nodes clustered, `/services/counter/web` works
-   on all three. Same hash, same storage, same counter."
+   **[SAY]** "If you have three nodes clustered, `/counter` works on all
+   three. Same hash, same storage, same counter."
 
 ---
 
@@ -212,7 +221,7 @@ Have three tiny services ready to paste or load from a file:
    the dispatcher. No stub generation, no client library, no OpenAPI."
 
 4. **[DO]** Deploy `auth` that wraps `render`.
-   **[DO]** `curl /services/auth/web` — get rendered HTML.
+   **[DO]** `curl /auth` — get rendered HTML.
    **[SAY]** "Three hops across three services. Everything composed by calling
    functions."
 
