@@ -14,9 +14,21 @@ Conventions used in the scripts:
 All demos assume these env vars are set in every shell:
 
 ```
-UNEX_URL=http://localhost:4040
 UNEX_SECRET=<your secret>
 UNEX_PROJECT=<your Unison project name, e.g. @you/demos>
+UNEX_DISPATCHER=$PWD/dispatcher.uc          # path to a compiled dispatcher.uc
+
+# Per-node API URLs (single-node demos only need UNEX_URL):
+UNEX_URL=http://localhost:4040              # node A
+UNEX_URL_B=http://localhost:4050            # node B
+UNEX_URL_C=http://localhost:4060            # node C
+```
+
+Build the dispatcher once before starting any node — both
+`mix unex.compile_dispatcher` and the runtime read `UNEX_DISPATCHER`:
+
+```
+mix unex.compile_dispatcher
 ```
 
 ---
@@ -30,23 +42,13 @@ project pushed.
 
 ### Setup (before the audience arrives)
 
-1. Pick a shared dispatcher path and build it once. The cluster nodes
-   each use a per-node `UNEX_DATA`, so the dispatcher binary needs to
-   live somewhere all three can read. Both the compile task and the
-   runtime read `UNEX_DISPATCHER`, so set it once and reuse it:
-   ```
-   export UNEX_DISPATCHER=$PWD/dispatcher.uc
-   mix unex.compile_dispatcher
-   ```
-   Confirm the file exists at `$UNEX_DISPATCHER` before continuing.
-
-2. With `UNEX_DISPATCHER` exported in your shell from step 1, start
-   three nodes on the same machine with different data dirs. `UNEX_PORT`
-   is the API port; the dashboard (if enabled) defaults to `4041`, so
-   don't reuse `4041` as another node's API port — pick API ports with
-   a gap and assign each dashboard its own port. Use long-name BEAM
-   nodes (`a@localhost`, not bare `a`) so peer addresses match what the
-   runtime actually registers:
+1. With `UNEX_DISPATCHER` exported (see the prerequisites at the top of
+   this file), start three nodes on the same machine with different
+   data dirs. `UNEX_PORT` is the API port; the dashboard (if enabled)
+   defaults to `4041`, so don't reuse `4041` as another node's API port
+   — the assignments below leave a gap and give each dashboard its own
+   port. Use long-name BEAM nodes (`a@localhost`, not bare `a`) so peer
+   addresses match what the runtime actually registers:
    ```
    UNEX_NODE=a@localhost UNEX_PORT=4040 UNEX_DASHBOARD=1 UNEX_DASHBOARD_PORT=5040 \
      UNEX_DATA=./data/a UNEX_COOKIE=demo mix unex.start
@@ -59,7 +61,8 @@ project pushed.
    ```
    The dashboard is opt-in. If you only want it on node A, drop
    `UNEX_DASHBOARD=1` (and `UNEX_DASHBOARD_PORT`) from B and C.
-3. Have a UCM window open on your Unison project with a small service ready to
+
+2. Have a UCM window open on your Unison project with a small service ready to
    push — a greeter function is enough:
    ```
    greeter : '{Unex.Storage, IO, Exception} ()
@@ -88,7 +91,7 @@ project pushed.
 
 3. **[SCREEN]** Terminal tailing node C's log.
    **[DO]** `curl -H "Authorization: Bearer $UNEX_SECRET" -X POST $UNEX_URL_C/services/greeter/call`
-   (where `$UNEX_URL_C` is node C on port 4042).
+   (`$UNEX_URL_C` from the prerequisites — node C on port 4060).
    **[SCREEN]** Logs show C issuing `GET /code/<termhash>` calls back to A for
    each missing blob, then caching them.
    **[SAY]** "C didn't have the code. It resolved each hash through the
@@ -124,7 +127,9 @@ project pushed.
 
 ### Setup
 
-- Node running on `:4040`.
+- Dispatcher compiled and `UNEX_DISPATCHER` exported (see prerequisites
+  at the top of this file).
+- Node running on `:4040` (e.g. `UNEX_PORT=4040 mix unex.start`).
 - UCM open, project ready to `push`.
 - Browser window showing `http://localhost:4040/counter` (currently 404).
 
@@ -304,11 +309,13 @@ something to fan out (100 prompts, 100 URLs, 100 files).
 
 ### Setup
 
-1. Store the key once:
+1. Store the key once (the API is `POST /config/<env>/<key>` with the
+   value in the body):
    ```
    curl -H "Authorization: Bearer $UNEX_SECRET" \
-        -X POST $UNEX_URL/config/prod \
-        -d '{"key":"openai_key","value":"sk-..."}'
+        -H 'Content-Type: application/json' \
+        -X POST $UNEX_URL/config/prod/openai_key \
+        -d '{"value":"sk-..."}'
    ```
 2. Deploy an `agent` service that reads one task id from `Scratch`, pulls the
    prompt from storage, calls the LLM, writes the artifact to `Blobs`, logs via
@@ -335,7 +342,7 @@ something to fan out (100 prompts, 100 URLs, 100 files).
    **[SAY]** "The BEAM scheduler is spreading work. `Unex.Remote` / `rpc.call`
    dispatches each task to whichever node is least loaded."
 
-4. **[DO]** `ls data-*/blobs/` on each node.
+4. **[DO]** `ls ./data/{a,b,c}/blobs/` on the host running the cluster.
    **[SCREEN]** Output files present, distributed across nodes.
    **[SAY]** "Artifacts wrote locally on whichever node ran them. If I need
    them globally, Blobs replicates through the same hash-cache machinery the
