@@ -9,14 +9,8 @@ defmodule Unex.Storage.OrderedTable do
 
   def ensure(db, table) do
     tab = table_name(db, table)
-
-    :mnesia.create_table(tab,
-      type: :ordered_set,
-      disc_copies: [node()],
-      attributes: [:key, :value]
-    )
-
-    :mnesia.wait_for_tables([tab], 5_000)
+    Unex.Storage.Schema.ensure_table!(tab, type: :ordered_set, attributes: [:key, :value])
+    :ok = :mnesia.wait_for_tables([tab], 5_000)
     :ok
   end
 

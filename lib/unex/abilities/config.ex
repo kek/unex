@@ -61,14 +61,7 @@ defmodule Unex.Abilities.Config do
   end
 
   defp ensure_table do
-    case :mnesia.create_table(@table, [
-           attributes: [:key, :value],
-           type: :set,
-           disc_copies: [node()]
-         ]) do
-      {:atomic, :ok} -> :ok
-      {:aborted, {:already_exists, @table}} -> :ok
-    end
+    Unex.Storage.Schema.ensure_table!(@table, type: :set, attributes: [:key, :value])
   end
 
   defp encryption_key do

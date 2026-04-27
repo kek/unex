@@ -31,14 +31,8 @@ defmodule Unex.Storage.Cell do
 
   defp ensure_table(db) do
     tab = table_name(db)
-
-    :mnesia.create_table(tab,
-      type: :set,
-      disc_copies: [node()],
-      attributes: [:name, :value]
-    )
-
-    :mnesia.wait_for_tables([tab], 5_000)
+    Unex.Storage.Schema.ensure_table!(tab, type: :set, attributes: [:name, :value])
+    :ok = :mnesia.wait_for_tables([tab], 5_000)
     :ok
   end
 end
