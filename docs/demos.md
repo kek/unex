@@ -33,15 +33,17 @@ project pushed.
 1. Start three nodes on the same machine with different data dirs.
    `UNEX_PORT` is the API port; the dashboard (if enabled) defaults to
    `4041`, so don't reuse `4041` as another node's API port — pick API
-   ports with a gap and assign each dashboard its own port:
+   ports with a gap and assign each dashboard its own port. Use
+   long-name BEAM nodes (`a@localhost`, not bare `a`) so peer addresses
+   match what the runtime actually registers:
    ```
-   UNEX_NODE=a UNEX_PORT=4040 UNEX_DASHBOARD=1 UNEX_DASHBOARD_PORT=5040 \
+   UNEX_NODE=a@localhost UNEX_PORT=4040 UNEX_DASHBOARD=1 UNEX_DASHBOARD_PORT=5040 \
      UNEX_DATA=./data/a UNEX_COOKIE=demo mix unex.start
 
-   UNEX_NODE=b UNEX_PORT=4050 UNEX_DASHBOARD=1 UNEX_DASHBOARD_PORT=5050 \
+   UNEX_NODE=b@localhost UNEX_PORT=4050 UNEX_DASHBOARD=1 UNEX_DASHBOARD_PORT=5050 \
      UNEX_DATA=./data/b UNEX_COOKIE=demo UNEX_PEERS=a@localhost mix unex.start
 
-   UNEX_NODE=c UNEX_PORT=4060 UNEX_DASHBOARD=1 UNEX_DASHBOARD_PORT=5060 \
+   UNEX_NODE=c@localhost UNEX_PORT=4060 UNEX_DASHBOARD=1 UNEX_DASHBOARD_PORT=5060 \
      UNEX_DATA=./data/c UNEX_COOKIE=demo UNEX_PEERS=a@localhost mix unex.start
    ```
    The dashboard is opt-in. If you only want it on node A, drop
