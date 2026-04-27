@@ -12,7 +12,8 @@ An ops platform for [Unison](https://www.unison-lang.org/) programs. Two-layer a
 
 ```bash
 mix deps.get                    # Install dependencies
-mix unex.start                # Start server (API on :4040)
+iex -S mix run --no-halt        # Start server (API on :4040), drop into iex
+mix run --no-halt               # Same, no shell
 mix test                        # Run all tests
 mix test --trace                # Verbose test output
 mix test test/path/file.exs     # Single test file
@@ -20,7 +21,9 @@ mix test test/path/file.exs:42  # Single test (line number)
 MIX_ENV=prod mix release        # Build production release
 ```
 
-Clustering: `UNEX_NODE=a UNEX_COOKIE=secret UNEX_PORT=4040 UNEX_PEERS=b@host mix unex.start`
+Clustering uses standard BEAM distribution flags:
+`iex --name a@127.0.0.1 --cookie secret -S mix run --no-halt` (set
+`UNEX_PEERS=b@127.0.0.1,...` so the node connects on boot).
 
 ## Dependencies
 

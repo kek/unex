@@ -43,21 +43,21 @@ project pushed.
 ### Setup (before the audience arrives)
 
 1. Start three nodes on the same machine with different data dirs.
-   `UNEX_PORT` is the API port; the dashboard (if enabled) defaults to
-   `4041`, so don't reuse `4041` as another node's API port — the
-   assignments below leave a gap and give each dashboard its own port.
-   Use long-name BEAM nodes with `@127.0.0.1` — BEAM rejects bare
-   `localhost` as a long name because it has no dot, and bare `a` would
-   register under your machine's short hostname instead, so peers
-   wouldn't resolve. Each command sets `UNEX_DISPATCHER` inline, so the
-   only thing you need on disk is
-   the `~/.local/share/unex/dispatcher.uc` you compiled in the prerequisites:
+   Distribution is enabled by passing `--name`/`--cookie` straight to
+   `iex` — BEAM rejects bare `localhost` as a long name because it has
+   no dot, so use `@127.0.0.1`. `UNEX_PORT` is the API port; the
+   dashboard (if enabled) defaults to `4041`, so don't reuse `4041` as
+   another node's API port — the assignments below leave a gap and
+   give each dashboard its own port. Each command sets
+   `UNEX_DISPATCHER` inline, so the only thing you need on disk is the
+   `~/.local/share/unex/dispatcher.uc` you compiled in the
+   prerequisites:
    ```
-   UNEX_DISPATCHER=$HOME/.local/share/unex/dispatcher.uc UNEX_NODE=a@127.0.0.1 UNEX_PORT=4040 UNEX_DASHBOARD=1 UNEX_DASHBOARD_PORT=5040 UNEX_DATA=./data/a UNEX_COOKIE=demo mix unex.start
+   UNEX_DISPATCHER=$HOME/.local/share/unex/dispatcher.uc UNEX_PORT=4040 UNEX_DASHBOARD=1 UNEX_DASHBOARD_PORT=5040 UNEX_DATA=./data/a iex --name a@127.0.0.1 --cookie demo -S mix run --no-halt
 
-   UNEX_DISPATCHER=$HOME/.local/share/unex/dispatcher.uc UNEX_NODE=b@127.0.0.1 UNEX_PORT=4050 UNEX_DASHBOARD=1 UNEX_DASHBOARD_PORT=5050 UNEX_DATA=./data/b UNEX_COOKIE=demo UNEX_PEERS=a@127.0.0.1 mix unex.start
+   UNEX_DISPATCHER=$HOME/.local/share/unex/dispatcher.uc UNEX_PORT=4050 UNEX_DASHBOARD=1 UNEX_DASHBOARD_PORT=5050 UNEX_DATA=./data/b UNEX_PEERS=a@127.0.0.1 iex --name b@127.0.0.1 --cookie demo -S mix run --no-halt
 
-   UNEX_DISPATCHER=$HOME/.local/share/unex/dispatcher.uc UNEX_NODE=c@127.0.0.1 UNEX_PORT=4060 UNEX_DASHBOARD=1 UNEX_DASHBOARD_PORT=5060 UNEX_DATA=./data/c UNEX_COOKIE=demo UNEX_PEERS=a@127.0.0.1 mix unex.start
+   UNEX_DISPATCHER=$HOME/.local/share/unex/dispatcher.uc UNEX_PORT=4060 UNEX_DASHBOARD=1 UNEX_DASHBOARD_PORT=5060 UNEX_DATA=./data/c UNEX_PEERS=a@127.0.0.1 iex --name c@127.0.0.1 --cookie demo -S mix run --no-halt
    ```
    The dashboard is opt-in. If you only want it on node A, drop
    `UNEX_DASHBOARD=1` (and `UNEX_DASHBOARD_PORT`) from B and C.
@@ -130,7 +130,7 @@ project pushed.
 - Dispatcher compiled (see prerequisites at the top of this file).
 - Node running on `:4040`:
   ```
-  UNEX_DISPATCHER=$HOME/.local/share/unex/dispatcher.uc UNEX_PORT=4040 UNEX_COOKIE=demo mix unex.start
+  UNEX_DISPATCHER=$HOME/.local/share/unex/dispatcher.uc UNEX_PORT=4040 iex -S mix run --no-halt
   ```
 - UCM open, project ready to `push`.
 - Browser window showing `http://localhost:4040/counter` (currently 404).

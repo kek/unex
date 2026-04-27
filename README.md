@@ -8,7 +8,7 @@ An open-source ops platform for [Unison](https://www.unison-lang.org/) programs.
 # Prerequisites: Elixir 1.17+, UCM (Unison Codebase Manager) 1.2.0
 mix deps.get
 mix unex.compile_dispatcher   # one-time, produces data/dispatcher.uc
-mix unex.start
+iex -S mix run --no-halt      # or: mix run --no-halt
 ```
 
 The API starts on `http://localhost:4040`. A secret is auto-generated on first run (printed to stdout). Set `UNEX_SECRET` to persist it across restarts.
@@ -26,7 +26,7 @@ cache distribution, service lifecycle, and runtime metrics.
 
 Enable it with:
 
-    UNEX_DASHBOARD=1 UNEX_DASHBOARD_USER=admin UNEX_DASHBOARD_PASS=secret mix unex.start
+    UNEX_DASHBOARD=1 UNEX_DASHBOARD_USER=admin UNEX_DASHBOARD_PASS=secret iex -S mix run --no-halt
 
 It listens on port `:4041` by default and is protected by HTTP Basic Auth.
 Open `http://localhost:4041` in a browser.

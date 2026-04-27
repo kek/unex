@@ -14,7 +14,16 @@ defmodule Unex.Application do
         api_children() ++
         dashboard_children()
 
-    Supervisor.start_link(children, strategy: :one_for_one, name: Unex.Supervisor)
+    result = Supervisor.start_link(children, strategy: :one_for_one, name: Unex.Supervisor)
+    maybe_start_code_reloader()
+    result
+  end
+
+  defp maybe_start_code_reloader do
+    if Application.get_env(:unex, :code_reloader, false) and
+         Code.ensure_loaded?(ExSync) do
+      {:ok, _} = Application.ensure_all_started(:exsync)
+    end
   end
 
   defp pubsub_children do

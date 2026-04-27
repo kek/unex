@@ -1,7 +1,7 @@
 # Unex configuration file example.
 #
 # Copy this file and point to it:
-#   UNEX_CONFIG=/path/to/config.exs mix unex.start
+#   UNEX_CONFIG=/path/to/config.exs iex -S mix run --no-halt
 #
 # Or place it at one of the default locations:
 #   ~/.config/unex/config.exs
@@ -20,10 +20,9 @@ config :unex,
   api_port: 4040,
   # api_secret: "your-secret-here",              # required; auto-generated if not set
 
-
-
   # Data storage
-  data_dir: "./data",                             # Mnesia and blobs stored under this directory
+  # Mnesia and blobs stored under this directory
+  data_dir: "./data",
 
   # Cluster peers (auto-connect on startup)
   # peers: ["b@10.0.1.2", "c@10.0.1.3"],

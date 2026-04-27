@@ -17,9 +17,9 @@ defmodule Unex.Integration.UnisonStorageTest do
     Unex.Storage.Schema.init(mnesia_dir)
 
     # 2. Start Bandit on an OS-assigned ephemeral port bound to localhost.
-    # Hard-coded ports collided with a running dev `mix unex.start` that
-    # held 127.0.0.1:4041 for the dashboard, silently routing test
-    # requests there.
+    # Hard-coded ports collided with a running dev node that held
+    # 127.0.0.1:4041 for the dashboard, silently routing test requests
+    # there.
     {:ok, bandit_pid} =
       Bandit.start_link(plug: Unex.API.Router, port: 0, ip: {127, 0, 0, 1})
 

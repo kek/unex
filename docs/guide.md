@@ -12,7 +12,7 @@ A hands-on guide to running Unison programs on the Unex platform. By the end you
 ```bash
 git clone <repo-url> unex && cd unex
 mix deps.get
-mix unex.start
+iex -S mix run --no-halt        # or: mix run --no-halt
 ```
 
 That's it. The API is live on `http://localhost:4040`. Verify:
@@ -82,7 +82,7 @@ main = Unex.main myApp
 
 `Unex.main` reads `UNEX_URL` and `UNEX_SECRET` from your environment — no credentials in code. Your app is safe to share on Unison Share.
 
-Load and run it in UCM (with `mix unex.start` running in another terminal):
+Load and run it in UCM (with the Unex node running in another terminal):
 
 ```
 myapp/main> load app.u
@@ -245,14 +245,18 @@ Your program doesn't know (or care) whether it's talking to a real server or a m
 
 ### Two nodes on one machine
 
+Distribution is configured by passing `--name`/`--cookie` straight to
+`iex` (BEAM rejects bare `localhost` as a long name, so use
+`@127.0.0.1`):
+
 Terminal 1:
 ```bash
-UNEX_NODE=a UNEX_COOKIE=secret UNEX_PORT=4040 UNEX_PEERS=b@$(hostname) mix unex.start
+UNEX_PORT=4040 UNEX_PEERS=b@127.0.0.1 iex --name a@127.0.0.1 --cookie secret -S mix run --no-halt
 ```
 
 Terminal 2:
 ```bash
-UNEX_NODE=b UNEX_COOKIE=secret UNEX_PORT=4041 UNEX_PEERS=a@$(hostname) mix unex.start
+UNEX_PORT=4041 UNEX_PEERS=a@127.0.0.1 iex --name b@127.0.0.1 --cookie secret -S mix run --no-halt
 ```
 
 Nodes auto-connect. Data written to node `a`'s storage API is on node `a`'s Mnesia. Config (encrypted secrets) is also per-node. Scratch is always node-local.
@@ -263,10 +267,10 @@ Use full node names:
 
 ```bash
 # Machine 1 (10.0.1.5)
-UNEX_NODE=a@10.0.1.5 UNEX_COOKIE=secret UNEX_PEERS=b@10.0.1.6 mix unex.start
+UNEX_PEERS=b@10.0.1.6 iex --name a@10.0.1.5 --cookie secret -S mix run --no-halt
 
 # Machine 2 (10.0.1.6)
-UNEX_NODE=b@10.0.1.6 UNEX_COOKIE=secret UNEX_PEERS=a@10.0.1.5 mix unex.start
+UNEX_PEERS=a@10.0.1.5 iex --name b@10.0.1.6 --cookie secret -S mix run --no-halt
 ```
 
 ### Production deployment
