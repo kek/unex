@@ -24,11 +24,11 @@ UNEX_URL_C=http://localhost:4060            # node C
 ```
 
 Build the dispatcher once before starting any node. The commands below
-use `./dispatcher.uc` inline, so this is the only place the path is
+use `~/.local/share/unex/dispatcher.uc` inline, so this is the only place the path is
 named:
 
 ```
-UNEX_DISPATCHER=$PWD/dispatcher.uc mix unex.compile_dispatcher
+UNEX_DISPATCHER=$HOME/.local/share/unex/dispatcher.uc mix unex.compile_dispatcher
 ```
 
 ---
@@ -49,13 +49,13 @@ project pushed.
    Use long-name BEAM nodes (`a@localhost`, not bare `a`) so peer
    addresses match what the runtime actually registers. Each command
    sets `UNEX_DISPATCHER` inline, so the only thing you need on disk is
-   the `./dispatcher.uc` you compiled in the prerequisites:
+   the `~/.local/share/unex/dispatcher.uc` you compiled in the prerequisites:
    ```
-   UNEX_DISPATCHER=$PWD/dispatcher.uc UNEX_NODE=a@localhost UNEX_PORT=4040 UNEX_DASHBOARD=1 UNEX_DASHBOARD_PORT=5040 UNEX_DATA=./data/a UNEX_COOKIE=demo mix unex.start
+   UNEX_DISPATCHER=$HOME/.local/share/unex/dispatcher.uc UNEX_NODE=a@localhost UNEX_PORT=4040 UNEX_DASHBOARD=1 UNEX_DASHBOARD_PORT=5040 UNEX_DATA=./data/a UNEX_COOKIE=demo mix unex.start
 
-   UNEX_DISPATCHER=$PWD/dispatcher.uc UNEX_NODE=b@localhost UNEX_PORT=4050 UNEX_DASHBOARD=1 UNEX_DASHBOARD_PORT=5050 UNEX_DATA=./data/b UNEX_COOKIE=demo UNEX_PEERS=a@localhost mix unex.start
+   UNEX_DISPATCHER=$HOME/.local/share/unex/dispatcher.uc UNEX_NODE=b@localhost UNEX_PORT=4050 UNEX_DASHBOARD=1 UNEX_DASHBOARD_PORT=5050 UNEX_DATA=./data/b UNEX_COOKIE=demo UNEX_PEERS=a@localhost mix unex.start
 
-   UNEX_DISPATCHER=$PWD/dispatcher.uc UNEX_NODE=c@localhost UNEX_PORT=4060 UNEX_DASHBOARD=1 UNEX_DASHBOARD_PORT=5060 UNEX_DATA=./data/c UNEX_COOKIE=demo UNEX_PEERS=a@localhost mix unex.start
+   UNEX_DISPATCHER=$HOME/.local/share/unex/dispatcher.uc UNEX_NODE=c@localhost UNEX_PORT=4060 UNEX_DASHBOARD=1 UNEX_DASHBOARD_PORT=5060 UNEX_DATA=./data/c UNEX_COOKIE=demo UNEX_PEERS=a@localhost mix unex.start
    ```
    The dashboard is opt-in. If you only want it on node A, drop
    `UNEX_DASHBOARD=1` (and `UNEX_DASHBOARD_PORT`) from B and C.
@@ -128,7 +128,7 @@ project pushed.
 - Dispatcher compiled (see prerequisites at the top of this file).
 - Node running on `:4040`:
   ```
-  UNEX_DISPATCHER=$PWD/dispatcher.uc UNEX_PORT=4040 UNEX_COOKIE=demo mix unex.start
+  UNEX_DISPATCHER=$HOME/.local/share/unex/dispatcher.uc UNEX_PORT=4040 UNEX_COOKIE=demo mix unex.start
   ```
 - UCM open, project ready to `push`.
 - Browser window showing `http://localhost:4040/counter` (currently 404).
