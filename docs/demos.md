@@ -46,16 +46,18 @@ project pushed.
    `UNEX_PORT` is the API port; the dashboard (if enabled) defaults to
    `4041`, so don't reuse `4041` as another node's API port — the
    assignments below leave a gap and give each dashboard its own port.
-   Use long-name BEAM nodes (`a@localhost`, not bare `a`) so peer
-   addresses match what the runtime actually registers. Each command
-   sets `UNEX_DISPATCHER` inline, so the only thing you need on disk is
+   Use long-name BEAM nodes with `@127.0.0.1` — BEAM rejects bare
+   `localhost` as a long name because it has no dot, and bare `a` would
+   register under your machine's short hostname instead, so peers
+   wouldn't resolve. Each command sets `UNEX_DISPATCHER` inline, so the
+   only thing you need on disk is
    the `~/.local/share/unex/dispatcher.uc` you compiled in the prerequisites:
    ```
-   UNEX_DISPATCHER=$HOME/.local/share/unex/dispatcher.uc UNEX_NODE=a@localhost UNEX_PORT=4040 UNEX_DASHBOARD=1 UNEX_DASHBOARD_PORT=5040 UNEX_DATA=./data/a UNEX_COOKIE=demo mix unex.start
+   UNEX_DISPATCHER=$HOME/.local/share/unex/dispatcher.uc UNEX_NODE=a@127.0.0.1 UNEX_PORT=4040 UNEX_DASHBOARD=1 UNEX_DASHBOARD_PORT=5040 UNEX_DATA=./data/a UNEX_COOKIE=demo mix unex.start
 
-   UNEX_DISPATCHER=$HOME/.local/share/unex/dispatcher.uc UNEX_NODE=b@localhost UNEX_PORT=4050 UNEX_DASHBOARD=1 UNEX_DASHBOARD_PORT=5050 UNEX_DATA=./data/b UNEX_COOKIE=demo UNEX_PEERS=a@localhost mix unex.start
+   UNEX_DISPATCHER=$HOME/.local/share/unex/dispatcher.uc UNEX_NODE=b@127.0.0.1 UNEX_PORT=4050 UNEX_DASHBOARD=1 UNEX_DASHBOARD_PORT=5050 UNEX_DATA=./data/b UNEX_COOKIE=demo UNEX_PEERS=a@127.0.0.1 mix unex.start
 
-   UNEX_DISPATCHER=$HOME/.local/share/unex/dispatcher.uc UNEX_NODE=c@localhost UNEX_PORT=4060 UNEX_DASHBOARD=1 UNEX_DASHBOARD_PORT=5060 UNEX_DATA=./data/c UNEX_COOKIE=demo UNEX_PEERS=a@localhost mix unex.start
+   UNEX_DISPATCHER=$HOME/.local/share/unex/dispatcher.uc UNEX_NODE=c@127.0.0.1 UNEX_PORT=4060 UNEX_DASHBOARD=1 UNEX_DASHBOARD_PORT=5060 UNEX_DATA=./data/c UNEX_COOKIE=demo UNEX_PEERS=a@127.0.0.1 mix unex.start
    ```
    The dashboard is opt-in. If you only want it on node A, drop
    `UNEX_DASHBOARD=1` (and `UNEX_DASHBOARD_PORT`) from B and C.
