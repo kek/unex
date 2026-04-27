@@ -22,13 +22,16 @@ defmodule Unex.Application do
   end
 
   defp cluster_children do
+    persist_services? = Application.get_env(:unex, :mnesia_dir) != nil
+    hash_cache_dir = Application.get_env(:unex, :hash_cache_dir)
+
     base = [
-      Unex.Cluster.HashCache,
+      {Unex.Cluster.HashCache, dir: hash_cache_dir},
       Unex.Cluster.SourceCache,
       Unex.Cluster.NameCache,
       Unex.Cluster.DepsCache,
       Unex.Cluster.SyncServer,
-      Unex.Services.Registry,
+      {Unex.Services.Registry, persist?: persist_services?},
       Unex.Abilities.Scratch,
       Unex.Abilities.Log,
       Unex.Runtime

@@ -12,6 +12,7 @@ defmodule Unex.ConfigResolver do
     data_dir: "./data",
     mnesia_dir: nil,
     blobs_dir: nil,
+    hash_cache_dir: nil,
     peers: [],
     ucm_path: "ucm"
   ]
@@ -57,11 +58,13 @@ defmodule Unex.ConfigResolver do
     config
   end
 
-  @doc "Derives mnesia_dir and blobs_dir from data_dir."
+  @doc "Derives mnesia_dir, blobs_dir, and hash_cache_dir from data_dir."
   def derive_paths(config) do
-    %{config |
-      mnesia_dir: Path.join(config.data_dir, "mnesia"),
-      blobs_dir: Path.join(config.data_dir, "blobs")
+    %{
+      config
+      | mnesia_dir: Path.join(config.data_dir, "mnesia"),
+        blobs_dir: Path.join(config.data_dir, "blobs"),
+        hash_cache_dir: Path.join(config.data_dir, "hashcache")
     }
   end
 

@@ -85,6 +85,7 @@ if config_env() != :test do
     api_url: get.("UNEX_API_URL", :api_url, nil),
     mnesia_dir: Path.join(data_dir, "mnesia"),
     blobs_dir: Path.join(data_dir, "blobs"),
+    hash_cache_dir: Path.join(data_dir, "hashcache"),
     config_encryption_key: encryption_key,
     api_secret: api_secret,
     ucm_path: get.("UCM_PATH", :ucm_path, "ucm"),

@@ -2,9 +2,16 @@ defmodule Unex.Services.Registry do
   @moduledoc """
   ETS-backed registry mapping service names to their bytecode hashes
   and deployment metadata. Supports cross-node resolution.
+
+  When started with `persist?: true`, registry mutations are written
+  through to a Mnesia disc-copy table so service deployments survive
+  process and node restarts. The ETS table is the read path; Mnesia is
+  the durable backing store and is hydrated into ETS on init.
   """
 
   use GenServer
+
+  alias Unex.Storage.Schema
 
   defmodule Entry do
     @moduledoc "A registered service entry."
@@ -24,10 +31,15 @@ defmodule Unex.Services.Registry do
   # Client API
   # ---------------------------------------------------------------------------
 
-  @doc "Starts the registry. `name:` defaults to `#{__MODULE__}`."
+  @doc """
+  Starts the registry. Options:
+    * `:name` — registered process name (default `#{__MODULE__}`)
+    * `:persist?` — when true, mirror writes to the `:unex_services` Mnesia
+      table and hydrate ETS from it on init (default `false`)
+  """
   def start_link(opts \\ []) do
     name = Keyword.get(opts, :name, __MODULE__)
-    GenServer.start_link(__MODULE__, name, name: name)
+    GenServer.start_link(__MODULE__, opts, name: name)
   end
 
   @doc """
@@ -67,9 +79,17 @@ defmodule Unex.Services.Registry do
   # ---------------------------------------------------------------------------
 
   @impl true
-  def init(name) do
+  def init(opts) when is_list(opts) do
+    name = Keyword.get(opts, :name, __MODULE__)
+    persist? = Keyword.get(opts, :persist?, false)
     table = :ets.new(name, [:set, :protected, {:read_concurrency, true}])
-    {:ok, %{table: table}}
+    if persist?, do: hydrate_from_mnesia(table)
+    {:ok, %{table: table, persist?: persist?}}
+  end
+
+  # Backwards-compatible: old callers passed just the name as init arg.
+  def init(name) when is_atom(name) do
+    init(name: name)
   end
 
   @impl true
@@ -84,6 +104,7 @@ defmodule Unex.Services.Registry do
     }
 
     :ets.insert(state.table, {name, entry})
+    if state.persist?, do: persist_write(name, entry)
     Unex.Dashboard.Events.broadcast_services({:registered, name, hash, deploy_node})
     {:reply, {:ok, entry}, state}
   end
@@ -121,6 +142,7 @@ defmodule Unex.Services.Registry do
 
   def handle_call({:unregister, name}, _from, state) do
     :ets.delete(state.table, name)
+    if state.persist?, do: persist_delete(name)
     Unex.Dashboard.Events.broadcast_services({:unregistered, name})
     {:reply, :ok, state}
   end
@@ -140,5 +162,35 @@ defmodule Unex.Services.Registry do
     catch
       :exit, _ -> ask_peers(rest, name)
     end
+  end
+
+  defp hydrate_from_mnesia(table) do
+    table_name = Schema.services_table()
+
+    case :mnesia.transaction(fn ->
+           :mnesia.foldl(
+             fn {^table_name, name, entry}, acc -> [{name, entry} | acc] end,
+             [],
+             table_name
+           )
+         end) do
+      {:atomic, rows} ->
+        Enum.each(rows, fn {name, entry} -> :ets.insert(table, {name, entry}) end)
+
+      {:aborted, _reason} ->
+        :ok
+    end
+  end
+
+  defp persist_write(name, entry) do
+    table = Schema.services_table()
+    :mnesia.transaction(fn -> :mnesia.write({table, name, entry}) end)
+    :ok
+  end
+
+  defp persist_delete(name) do
+    table = Schema.services_table()
+    :mnesia.transaction(fn -> :mnesia.delete({table, name}) end)
+    :ok
   end
 end

@@ -4,6 +4,9 @@ defmodule Unex.Storage.Schema do
   """
 
   @registry_table :unex_registry
+  @services_table :unex_services
+
+  def services_table, do: @services_table
 
   def init(dir) do
     :mnesia.stop()
@@ -16,7 +19,12 @@ defmodule Unex.Storage.Schema do
       attributes: [:key, :value]
     )
 
-    :mnesia.wait_for_tables([@registry_table], 5_000)
+    :mnesia.create_table(@services_table,
+      disc_copies: [node()],
+      attributes: [:name, :entry]
+    )
+
+    :mnesia.wait_for_tables([@registry_table, @services_table], 5_000)
     :ok
   end
 end

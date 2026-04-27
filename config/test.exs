@@ -6,6 +6,7 @@ config :unex,
   start_dispatcher: false,
   mnesia_dir: nil,
   blobs_dir: nil,
+  hash_cache_dir: nil,
   config_encryption_key: "test-key-not-for-production",
   api_secret: "test-secret"
 

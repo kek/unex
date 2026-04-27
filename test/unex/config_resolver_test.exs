@@ -103,11 +103,12 @@ defmodule Unex.ConfigResolverTest do
   end
 
   describe "derive_paths/1" do
-    test "derives mnesia_dir and blobs_dir from data_dir" do
+    test "derives mnesia_dir, blobs_dir, and hash_cache_dir from data_dir" do
       config = %{ConfigResolver.defaults() | data_dir: "/var/data/unex"}
       derived = ConfigResolver.derive_paths(config)
       assert derived.mnesia_dir == "/var/data/unex/mnesia"
       assert derived.blobs_dir == "/var/data/unex/blobs"
+      assert derived.hash_cache_dir == "/var/data/unex/hashcache"
     end
   end
 
@@ -150,6 +151,7 @@ defmodule Unex.ConfigResolverTest do
 
       assert resolved.mnesia_dir == "/tmp/unex-resolve/mnesia"
       assert resolved.blobs_dir == "/tmp/unex-resolve/blobs"
+      assert resolved.hash_cache_dir == "/tmp/unex-resolve/hashcache"
       assert is_binary(resolved.config_encryption_key)
       assert is_binary(resolved.api_secret)
       assert key_generated?

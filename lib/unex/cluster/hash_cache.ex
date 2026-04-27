@@ -4,6 +4,11 @@ defmodule Unex.Cluster.HashCache do
 
   Reads go directly to ETS (no GenServer round-trip); writes go through
   the GenServer so that only one process owns the table.
+
+  When started with a `:dir` option, every put is mirrored to a file at
+  `<dir>/<hash>` so the cache survives restarts. On init, the cache
+  re-hydrates from any pre-existing files in `dir`. The on-disk layout
+  is content-addressed: filename equals the hash (lowercase hex).
   """
 
   use GenServer
@@ -14,10 +19,15 @@ defmodule Unex.Cluster.HashCache do
   # Client API
   # ---------------------------------------------------------------------------
 
-  @doc "Starts the cache. `name:` defaults to `#{__MODULE__}`."
+  @doc """
+  Starts the cache. Options:
+    * `:name` — registered process name (default `#{__MODULE__}`)
+    * `:dir` — when set, blobs are persisted to this directory and the
+      cache is hydrated from it on init (default `nil` = pure ETS)
+  """
   def start_link(opts \\ []) do
     name = Keyword.get(opts, :name, __MODULE__)
-    GenServer.start_link(__MODULE__, name, name: name)
+    GenServer.start_link(__MODULE__, opts, name: name)
   end
 
   @doc """
@@ -135,20 +145,80 @@ defmodule Unex.Cluster.HashCache do
   # ---------------------------------------------------------------------------
 
   @impl true
-  def init(name) do
+  def init(opts) when is_list(opts) do
+    name = Keyword.get(opts, :name, __MODULE__)
+    dir = Keyword.get(opts, :dir)
     table = :ets.new(name, [:set, :public, {:read_concurrency, true}])
     meta = :ets.new(:"#{name}_meta", [:set, :public, {:read_concurrency, true}])
-    {:ok, %{table: table, meta: meta}}
+
+    if dir do
+      File.mkdir_p!(dir)
+      hydrate_from_dir(table, meta, dir)
+    end
+
+    {:ok, %{table: table, meta: meta, dir: dir}}
   end
 
   @impl true
   def handle_call({:put, hash, data}, _from, state) do
     :ets.insert(state.table, {hash, data})
-    :ets.insert(state.meta, {hash, System.system_time(:millisecond)})
+    ts = System.system_time(:millisecond)
+    :ets.insert(state.meta, {hash, ts})
+    if state.dir, do: write_blob(state.dir, hash, data)
     Unex.Dashboard.Events.broadcast_hashcache({:put, hash, byte_size(data)})
     {:reply, :ok, state}
   end
 
   def handle_call(:table, _from, state), do: {:reply, state.table, state}
   def handle_call(:meta, _from, state), do: {:reply, state.meta, state}
+
+  # ---------------------------------------------------------------------------
+  # Persistence helpers
+  # ---------------------------------------------------------------------------
+
+  defp blob_path(dir, hash), do: Path.join(dir, hash)
+
+  defp write_blob(dir, hash, data) do
+    path = blob_path(dir, hash)
+    tmp = path <> ".tmp"
+    File.write!(tmp, data)
+    File.rename!(tmp, path)
+    :ok
+  end
+
+  defp hydrate_from_dir(table, meta, dir) do
+    case File.ls(dir) do
+      {:ok, entries} ->
+        Enum.each(entries, fn name ->
+          path = Path.join(dir, name)
+
+          if valid_hash?(name) and File.regular?(path) do
+            with {:ok, data} <- File.read(path) do
+              :ets.insert(table, {name, data})
+              ts = mtime_ms(path)
+              :ets.insert(meta, {name, ts})
+            end
+          end
+        end)
+
+      {:error, _} ->
+        :ok
+    end
+  end
+
+  # HashCache stores two key formats:
+  #   * SHA256 hex (64 chars) — used for root Value bytes
+  #   * Unison Link.Term hash (~52 lowercase base32 chars) — used for Code blobs
+  # Both are lowercase alphanumeric. The length window covers both and filters
+  # stray files (READMEs, `.tmp` partials from interrupted writes, etc).
+  defp valid_hash?(name) do
+    String.match?(name, ~r/^[0-9a-z]{40,80}$/)
+  end
+
+  defp mtime_ms(path) do
+    case File.stat(path, time: :posix) do
+      {:ok, %File.Stat{mtime: secs}} -> secs * 1000
+      _ -> 0
+    end
+  end
 end
