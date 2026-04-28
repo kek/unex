@@ -89,12 +89,12 @@ A single long-lived dispatcher process evaluates every service call. There is no
 
 **Boot:** On app start, `Unex.Dispatcher` listens on `127.0.0.1:0` and spawns `ucm run.compiled $UNEX_DISPATCHER`. The Unison program reads `UNEX_DISPATCHER_PORT` from its environment, connects back via `Socket.client`, and enters a request loop. Elixir accepts the one incoming connection.
 
-**Per request (`POST /services/:name/call`):**
+**Per request (`POST /services/:name/call` or `GET /<name>`):**
 
-1. `Services.Registry` resolves the name to a root-value hash.
-2. `SyncServer` fetches the serialized `Value` bytes from the cluster (local `HashCache`, or a peer via RPC).
-3. `Unex.Dispatcher.eval` sends `<<len::8, value_bytes>>` over the protocol socket.
-4. The Unison dispatcher `Value.deserialize`s, `Value.load`s as a `'{IO, Exception} ()` thunk, and **iteratively satisfies missing `Code` deps** by issuing `GET /code/:termhash` back to the same Elixir server. Fetched codes are `Code.cache_`'d; `Value.load` is retried until all deps resolve.
+1. `Services.Registry.resolve(name)` returns the current root-value hash. On a node that doesn't own the entry, the registry GenServer falls back to `ask_peers(Node.list(), name)` and `GenServer.call({Registry, peer}, {:lookup, name})` on each connected peer until one answers.
+2. `SyncServer.resolve([hash])` returns the serialized `Value` bytes. Local `HashCache` first; on miss, `ask_peers` does `GenServer.call({SyncServer, peer}, {:fetch_local, hash})` on each connected peer. Anything fetched is immediately `HashCache.put`'d so the next call is local.
+3. `Unex.Dispatcher.eval` sends `<<len::8, value_bytes>>` over the protocol socket to the local dispatcher.
+4. The Unison dispatcher `Value.deserialize`s, `Value.load`s as a `'{IO, Exception} ()` thunk, and **iteratively satisfies missing `Code` deps** by issuing `GET /code/:termhash` back to its own node's API (the URL was wired in at dispatcher boot). The handler is `CodeController.get/2`, which itself goes through `SyncServer.resolve/1` — so a `Code` blob the local node has never seen is also pulled from peers on demand. Fetched codes are `Code.cache_`'d; `Value.load` is retried until all deps resolve.
 5. The thunk runs for its side effects. Anything the user program writes to `stdout` is captured by Elixir from the subprocess's pipe (the protocol is on a separate socket, so `printLine` is free to use stdout).
 6. On completion, the dispatcher sends an OK response frame. Elixir wraps the accumulated stdout in `%Runner.Result{stdout: ..., stderr: "", exit_code: 0}` and returns it to the caller.
 
@@ -102,34 +102,49 @@ Because the dispatcher is persistent, typical service calls complete in single-d
 
 **Concurrency.** The dispatcher is currently single-inflight — calls queue on the GenServer. Adding a pool is a future concern.
 
-**Remote nodes.** `Services.call` with `:node` opts RPCs `eval_local/2` on the target node, which has its own local dispatcher. The Code store is cluster-replicated via `SyncServer`, so any node can serve any service.
+**Remote nodes.** `Services.call` with `:node` opts RPCs `eval_local/2` on the target node, which has its own local dispatcher. By default the call stays local: every node can serve any service because both the registry entry and the code blobs are reachable on demand through the layers above.
 
 ## Cluster distribution
 
 Unex nodes form a cluster using BEAM distribution (Erlang's built-in node-to-node communication).
 
 ```
-Node A (port 4040)  <-- BEAM distribution -->  Node B (port 4041)
-  HashCache (ETS)                                 HashCache (ETS)
+Node A (port 4040)  <-- BEAM distribution -->  Node B (port 4050)
+  HashCache (ETS + disk)                          HashCache (ETS + disk)
   SyncServer                                      SyncServer
   Services.Registry                               Services.Registry
   Mnesia (local)                                  Mnesia (local)
 ```
 
-### Code distribution
+Nothing is eagerly replicated. Every node has the same components, and the cluster is held together by two demand-driven lookup paths — one for *which version* (registry) and one for *the bytes of that version* (HashCache via SyncServer). Both fall back to peer RPC on local miss.
 
-`HashCache` on each node stores content-addressed blobs in ETS:
+### Two layers of indirection
 
-- **Root `Value` bytes**, keyed by SHA256 (each deployed service has one).
-- **`Code` bytes**, keyed by `Link.Term` hash (one per definition referenced across all services).
+| Question                       | Lookup mechanism                                                                                                                                                                                                                                                                                                                       |
+|--------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `service_name → root_hash`     | `Services.Registry`. Per-node ETS map of `name → %Entry{hash, deploy_node, deployed_at, project, entry_point}`. `Registry.resolve/1` reads local ETS first; on miss, walks `Node.list()` doing `GenServer.call({Registry, peer}, {:lookup, name})` until one answers.                                                                |
+| `hash → bytes`                 | `HashCache` + `SyncServer`. Per-node ETS keyed by SHA-256 (root `Value` bytes) or `Link.Term` text (per-term `Code` bytes), mirrored to disk under `<UNEX_DATA>/hashcache/`. `SyncServer.resolve/1` checks local; on miss, walks `Node.list()` doing `GenServer.call({SyncServer, peer}, {:fetch_local, hash})`. Anything pulled is `HashCache.put`'d so subsequent reads stay local. |
 
-When a node is missing a key, `SyncServer` asks connected peers via RPC. Anything retrieved from a peer is cached locally.
+Both fallbacks query connected peers sequentially. If no peer has the entry/blob, the request fails with `:not_found`.
 
-This means deploying to one node makes a service available to all nodes. The first node whose dispatcher needs a particular `Code` fetches it from the deploying node; subsequent calls use the local cache.
+### Walkthrough: `GET /counter` on node B (deployed on A)
 
-### Service registry
+1. **Registry resolve.** B's `Services.Registry.resolve("counter")` misses ETS, asks peers, A returns the `%Entry{}` with the current `hash`.
+2. **Root value fetch.** `Services.eval_local(hash)` calls `SyncServer.resolve([hash])`. B's `HashCache` misses, asks peers, A serves the bytes. B caches.
+3. **Hand off to dispatcher.** B's local `Unex.Dispatcher` (its own long-lived `ucm run.compiled` subprocess) deserializes the `Value` and starts running the thunk.
+4. **Lazy code fetch.** Whenever the runtime hits a `Link.Term` reference whose bytecode it hasn't loaded, the Unison dispatcher issues `GET http://localhost:<B's api port>/code/<termhash>` (the callback URL was hard-wired at dispatcher boot from `:api_port`). B's `CodeController.get/2` calls `SyncServer.resolve([termhash])` — same local-then-peer fallback. A serves the bytes; B caches them. The dispatcher `Code.cache_`'s the result and continues.
+5. **Result.** Stdout from the subprocess is captured by Elixir and returned as the response body (HTML for `/<name>`, JSON for `/services/:name/call`).
 
-`Services.Registry` maps service names to `{hash, node, deployed_at}` entries. Each entry records which node the service was deployed on. When a node receives a call for a service it doesn't have registered locally, it asks peers via RPC.
+The first call on B touches the network for the registry entry, the root `Value`, and however many `Code` blobs the evaluation actually walks. The second call is fully local — every blob it needed is now in B's `HashCache`. This is what "redeploy is kilobytes" actually means in practice.
+
+### Versioning
+
+Hash *is* the version — content addressing collapses naming and identity. Two consequences:
+
+- **`HashCache` entries never go stale.** The key determines the bytes. Re-deploying with new code produces a new root hash, so it has nowhere to collide with the old one. There's nothing to invalidate.
+- **Rollback is registry-only.** `Services.deploy` mints a new root hash and stores blobs in `HashCache`; `Services.release(name, hash)` is a one-line registry pointer move. The previous hash and its full transitive closure stay in `HashCache` forever, so re-releasing an old hash brings the old behavior back instantly without re-fetching anything. Most blobs are shared across versions (same `printLine` impl, same ability machinery) so the redeploy delta is usually a handful of new `Code` blobs plus one new root `Value`.
+
+Across nodes, the registry's `name → hash` mapping is the only thing that can change underfoot. B asks A's registry on every `Services.call`, so the next request after A re-deploys resolves to the new hash and the fetch chain runs again for whatever's missing.
 
 ### Execution routing
 
@@ -137,17 +152,19 @@ This means deploying to one node makes a service available to all nodes. The fir
 
 ### What is shared vs. local
 
-| Component | Scope | Notes |
-|-----------|-------|-------|
-| HashCache (Values + Code) | Cluster-wide via SyncServer | Cached locally after first fetch |
-| Services.Registry | Cluster-wide via peer resolution | Name -> root-value hash -> node |
-| Unex.Dispatcher | Per-node | Long-lived `ucm run.compiled` with protocol over localhost socket |
-| Mnesia (Storage) | Per-node | Each node has its own databases and tables |
-| Config (secrets) | Per-node | AES-256-GCM encrypted, stored in Mnesia |
-| Scratch (cache) | Per-node | ETS, lost on restart |
-| Log | Per-node | ETS ring buffer |
-| Blobs | Per-node | Filesystem at `data/blobs/` |
-| Runtime (compilation) | Per-node | Each node has its own UCM codebase |
+| Component                   | Scope     | Notes                                                                  |
+|-----------------------------|-----------|------------------------------------------------------------------------|
+| `HashCache` (Values + Code) | Per-node  | Lazily fetched from peers via `SyncServer` on miss; cached forever.    |
+| `Services.Registry`         | Per-node  | Owned by deploy node. Peers query on demand via `ask_peers`.           |
+| `Unex.Dispatcher`           | Per-node  | Long-lived `ucm run.compiled` with protocol over localhost socket.     |
+| Mnesia (Storage cells, OrderedTables) | Per-node  | **Not** cluster-replicated. Writes go to the node that received them.  |
+| Config (secrets)            | Per-node  | AES-256-GCM encrypted, stored in Mnesia.                               |
+| Scratch (cache)             | Per-node  | ETS, lost on restart.                                                  |
+| Log                         | Per-node  | ETS ring buffer.                                                       |
+| Blobs                       | Per-node  | Filesystem at `<UNEX_DATA>/blobs/`.                                    |
+| Runtime (compilation)       | Per-node  | Each node has its own UCM codebase under `<UNEX_DATA>/runtime_codebase/`. |
+
+Worth flagging: the storage row means cluster-coherent state needs deliberate routing. A counter incremented on B and one incremented on A are two independent counters in two independent Mnesia tables. If you need cluster-wide coherence, route writes through one node (e.g. always call `Services.call(name, node: :"a@…")`) or build replication on top of the storage abilities.
 
 ## Server components
 
@@ -167,7 +184,12 @@ Unex.Application (supervisor)
 
 ### HTTP API
 
-All endpoints except `/health` require bearer token authentication. The API is the interface between Unison programs and the server:
+Bearer-token auth is enforced on every endpoint except:
+
+- `GET /health` — always public.
+- `GET /<name>` — public if `<name>` resolves to a registered service via `Services.Registry.resolve/1` (matches cluster-wide reachability, not just local). This is the public web endpoint that returns raw stdout as `text/html`.
+
+The API is the interface between Unison programs and the server:
 
 - **Storage** — databases, tables, cells, transactions (Mnesia)
 - **Config** — encrypted secrets by environment (Mnesia + AES-256-GCM)
@@ -175,8 +197,8 @@ All endpoints except `/health` require bearer token authentication. The API is t
 - **Scratch** — ephemeral cache (ETS)
 - **Log** — structured log entries (ETS ring buffer)
 - **Bytecode** — push/pull arbitrary `.uc` bundles (legacy; not used by the dispatcher deploy flow)
-- **Code** — `GET /code/:termhash` serves a serialized `Code` blob; the dispatcher fetches its missing deps through this endpoint
-- **Services** — deploy, release, call, list, undeploy, `/services/:name/web` (HTML wrapper over `call`)
+- **Code** — `GET /code/:termhash` serves a serialized `Code` blob; the dispatcher fetches its missing deps through this endpoint, and the handler itself goes through `SyncServer` so a peer can serve blobs the local node has never seen.
+- **Services** — `POST /services/:name/{deploy,release,call}`, `GET /services`, `DELETE /services/:name`, plus the `GET /<name>` public web wrapper above.
 
 ### UCM interaction
 
