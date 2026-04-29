@@ -27,7 +27,7 @@ Clustering uses standard BEAM distribution flags:
 
 ## Dependencies
 
-Minimal: Plug (HTTP middleware), Bandit (HTTP server), Jason (JSON). No external database drivers — storage is Mnesia (built into BEAM). Requires Elixir 1.17+ and UCM binary on PATH.
+Minimal: Plug (HTTP middleware), Bandit (HTTP server), Jason (JSON). No external database drivers — storage is Mnesia (built into BEAM). Requires Elixir 1.19+ and UCM binary on PATH.
 
 ## Architecture
 

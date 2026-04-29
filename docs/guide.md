@@ -4,7 +4,7 @@ A hands-on guide to running Unison programs on the Unex platform. By the end you
 
 ## Prerequisites
 
-- **Elixir 1.17+** with Mix
+- **Elixir 1.19+** with Mix
 - **UCM** (Unison Codebase Manager) 1.0+ on your PATH
 
 ## Part 1: Start the server

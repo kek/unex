@@ -29,7 +29,7 @@ Clustering uses standard BEAM distribution flags:
 
 Core runtime: Plug (HTTP middleware), Bandit (HTTP server), Jason (JSON). No
 external database drivers — storage is Mnesia (built into BEAM). Requires
-Elixir 1.17+ and UCM binary on PATH.
+Elixir 1.19+ and UCM binary on PATH.
 
 Dashboard (opt-in, same BEAM node): Phoenix 1.7, Phoenix LiveView 1.0,
 Phoenix LiveDashboard, Phoenix.PubSub, telemetry_metrics, telemetry_poller.

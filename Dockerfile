@@ -1,4 +1,4 @@
-ARG ELIXIR_VERSION=1.17.3
+ARG ELIXIR_VERSION=1.19.5
 ARG OTP_VERSION=27.3.4.10
 ARG DEBIAN_VERSION=bookworm-20260406-slim
 # UCM version pinned for both the build (compile Dispatcher.uc) and runtime

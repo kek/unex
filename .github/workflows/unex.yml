@@ -12,7 +12,7 @@ jobs:
       - uses: erlef/setup-beam@v1
         with:
           otp-version: "27"
-          elixir-version: "1.17"
+          elixir-version: "1.19"
       - name: Install UCM
         run: |
           curl -fsSL "https://github.com/unisonweb/unison/releases/download/release%2F1.1.1/ucm-linux-arm64.tar.gz" -o ucm.tar.gz

@@ -5,7 +5,7 @@ An open-source ops platform for [Unison](https://www.unison-lang.org/) programs.
 ## Quick start
 
 ```bash
-# Prerequisites: Elixir 1.17+, UCM (Unison Codebase Manager) 1.2.0
+# Prerequisites: Elixir 1.19+, UCM (Unison Codebase Manager) 1.2.0
 mix deps.get
 mix unex.compile_dispatcher   # one-time, produces data/dispatcher.uc
 iex -S mix run --no-halt      # or: mix run --no-halt
