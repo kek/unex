@@ -25,3 +25,7 @@ uniops-*.tar
 .unisonHistory
 data/
 scratch.u
+
+# Generated documentation PDFs (regenerate with `mix docs.pdf`).
+/docs/pdf/
+/output/
