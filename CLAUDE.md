@@ -38,7 +38,7 @@ Asset pipeline uses esbuild and tailwind via Mix tasks.
 ## Architecture
 
 ### Supervision tree (`Unex.Application`)
-Always started: `HashCache`, `SyncServer`, `Services.Registry`, `Scratch`, `Log`, `Runtime`. Conditionally started: `Dispatcher` (when `:start_dispatcher` is true AND `dispatcher.uc` exists), `PeerConnector` (when peers configured), Bandit HTTP server (when `:start_api` is true).
+Always started: `Phoenix.PubSub`, `HashCache`, `SourceCache`, `NameCache`, `DepsCache`, `SyncServer`, `Services.Registry`, `Scratch`, `Log`, `Runtime`. Conditionally started: `Dispatcher` (when `:start_dispatcher` is true, default on), `PeerConnector` (when peers configured), Bandit HTTP server (when `:start_api` is true).
 
 ### Execution flow
 `Unex.eval/2` and `Unex.compile_and_run/2` are the top-level API for one-shot source runs. Both create an ephemeral `Workspace` (isolated Unison codebase in tmp), then either run source directly via `Runner.run_file` or compile to `.uc` bytecode via `Compiler` first.
@@ -52,7 +52,7 @@ All backed by Mnesia disc copies. `Schema` initializes tables on boot. `Database
 Each maps to a Unison ability and an API controller: `Config` (AES-256-GCM encrypted secrets by environment), `Scratch` (ETS ephemeral cache), `Log` (ETS ring buffer), `Blobs` (filesystem at `data/blobs/`).
 
 ### Clustering (`lib/unex/cluster/`)
-`HashCache` stores content-addressed blobs in ETS — root `Value` bytes keyed by SHA256 and per-term `Code` bytes keyed by `Link.Term` hash. `SyncServer` resolves keys across nodes via RPC. `PeerConnector` auto-connects with exponential backoff. `Remote` (legacy) still exists but `Services.call` drives cross-node execution directly via `:rpc.call` to `Services.eval_local/2` on the target node.
+`HashCache` stores content-addressed blobs in ETS — root `Value` bytes keyed by SHA256 and per-term `Code` bytes keyed by `Link.Term` hash. `SourceCache` stores prettified Unison source keyed by service root hash (captured at deploy time; used by the dashboard's `/hash/:id` view). `NameCache` maps term hashes to Unison names. `DepsCache` stores per-term dependency graphs. `SyncServer` resolves keys across nodes via RPC. `PeerConnector` auto-connects with exponential backoff. `Remote` (legacy) still exists but has no HTTP routes — `Services.call` drives cross-node execution directly via `:rpc.call` to `Services.eval_local/2` on the target node.
 
 ### HTTP API (`lib/unex/api/`)
 Plug router dispatches to controllers. `Auth` plug enforces bearer token (`Authorization: Bearer <secret>`) on all routes except `/health`. Each controller handles JSON encoding/decoding for its domain. API runs on Bandit, default port 4040.
@@ -77,6 +77,9 @@ Dashboard env vars:
 - `UNEX_DASHBOARD_PORT` — dashboard HTTP port (default 4041)
 - `UNEX_DASHBOARD_HOST` — bind address (default `127.0.0.1`; set to `0.0.0.0` to expose on all interfaces)
 - `UNEX_DASHBOARD_USER`, `UNEX_DASHBOARD_PASS` — Basic Auth credentials
+- `UNEX_DASHBOARD_SECRET` — `secret_key_base` for the dashboard Phoenix endpoint (auto-derived from node name if not set; pin this in production for session stability across restarts)
+- `UNEX_DASHBOARD_URL` — public URL of the dashboard (used for LiveSocket `check_origin`; required when the dashboard is behind a reverse proxy with a non-default host/scheme)
+- `UNEX_API_URL` — base URL of the Elixir API, used by the dashboard to generate links to API endpoints
 
 ## Test Structure
 

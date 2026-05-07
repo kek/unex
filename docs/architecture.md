@@ -155,6 +155,9 @@ Across nodes, the registry's `name → hash` mapping is the only thing that can 
 | Component                   | Scope     | Notes                                                                  |
 |-----------------------------|-----------|------------------------------------------------------------------------|
 | `HashCache` (Values + Code) | Per-node  | Lazily fetched from peers via `SyncServer` on miss; cached forever.    |
+| `SourceCache`               | Per-node  | Prettified Unison source by service hash. Populated at deploy time.    |
+| `NameCache`                 | Per-node  | Hash → Unison term name. Populated at deploy time.                     |
+| `DepsCache`                 | Per-node  | Per-term dependency graph. Populated at deploy time.                   |
 | `Services.Registry`         | Per-node  | Owned by deploy node. Peers query on demand via `ask_peers`.           |
 | `Unex.Dispatcher`           | Per-node  | Long-lived `ucm run.compiled` with protocol over localhost socket.     |
 | Mnesia (Storage cells, OrderedTables) | Per-node  | **Not** cluster-replicated. Writes go to the node that received them.  |
@@ -171,15 +174,19 @@ Worth flagging: the storage row means cluster-coherent state needs deliberate ro
 ```
 Unex.Application (supervisor)
   |
-  +-- Unex.Cluster.HashCache      ETS content-addressed cache (Value + Code)
-  +-- Unex.Cluster.SyncServer     Cross-node key resolution
-  +-- Unex.Services.Registry      Service name -> root-value-hash mapping
-  +-- Unex.Abilities.Scratch      ETS ephemeral key-value
-  +-- Unex.Abilities.Log          ETS ring buffer
-  +-- Unex.Runtime                Persistent UCM codebase for extraction
-  +-- Unex.Dispatcher             (if dispatcher.uc present) Long-lived evaluator
-  +-- Unex.Cluster.PeerConnector  (if peers configured) Auto-connect with backoff
-  +-- Bandit HTTP server          (if API enabled) Serves the HTTP API on :4040
+  +-- Phoenix.PubSub                  PubSub broker (always started; dashboard subscribes when enabled)
+  +-- Unex.Cluster.HashCache          ETS content-addressed cache (Value + Code)
+  +-- Unex.Cluster.SourceCache        ETS prettified source by service hash (for dashboard /hash/:id)
+  +-- Unex.Cluster.NameCache          ETS hash → Unison term name map (for dashboard)
+  +-- Unex.Cluster.DepsCache          ETS per-term dependency graph (for dashboard)
+  +-- Unex.Cluster.SyncServer         Cross-node key resolution
+  +-- Unex.Services.Registry          Service name -> root-value-hash mapping
+  +-- Unex.Abilities.Scratch          ETS ephemeral key-value
+  +-- Unex.Abilities.Log              ETS ring buffer
+  +-- Unex.Runtime                    Persistent UCM codebase for extraction
+  +-- Unex.Dispatcher                 (if start_dispatcher enabled, default on) Long-lived evaluator
+  +-- Unex.Cluster.PeerConnector      (if peers configured) Auto-connect with backoff
+  +-- Bandit HTTP server              (if API enabled) Serves the HTTP API on :4040
 ```
 
 ### HTTP API
