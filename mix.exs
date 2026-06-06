@@ -36,6 +36,7 @@ defmodule Unex.MixProject do
       {:plug, "~> 1.16"},
       {:bandit, "~> 1.6"},
       {:jason, "~> 1.4"},
+      {:nimble_pool, "~> 1.1"},
       {:phoenix, "~> 1.7.14"},
       {:phoenix_html, "~> 4.1"},
       {:phoenix_live_view, "~> 1.0"},

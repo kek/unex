@@ -47,7 +47,8 @@ defmodule Unex.Application do
     ]
 
     if Application.get_env(:unex, :start_dispatcher, true) do
-      base ++ [Unex.Dispatcher]
+      pool_size = Application.get_env(:unex, :dispatcher_pool_size, 4)
+      base ++ [{Unex.Dispatcher.Pool, pool_size: pool_size}]
     else
       base
     end

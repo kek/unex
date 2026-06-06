@@ -46,8 +46,10 @@ defmodule Unex.Dispatcher do
   # --------------------------------------------------------------------------
 
   def start_link(opts \\ []) do
-    name = Keyword.get(opts, :name, __MODULE__)
-    GenServer.start_link(__MODULE__, opts, name: name)
+    case Keyword.get(opts, :name, __MODULE__) do
+      nil -> GenServer.start_link(__MODULE__, opts)
+      name -> GenServer.start_link(__MODULE__, opts, name: name)
+    end
   end
 
   @doc """
@@ -155,6 +157,10 @@ defmodule Unex.Dispatcher do
   @impl true
   def handle_call(:running?, _from, state),
     do: {:reply, state.client != nil, state}
+
+  def handle_call({:eval, _bytes, _timeout}, _from, %{client: nil} = state) do
+    {:reply, {:error, :socket_closed}, state}
+  end
 
   def handle_call({:eval, bytes, _timeout}, from, state) do
     frame = <<byte_size(bytes)::unsigned-big-integer-size(64), bytes::binary>>

@@ -85,22 +85,23 @@ Back on the Elixir side, Unex reads the output directory and:
 
 ### 5. Execution
 
-A single long-lived dispatcher process evaluates every service call. There is no per-call UCM subprocess.
+A pool of long-lived dispatcher processes evaluates service calls. There is no per-call UCM subprocess.
 
-**Boot:** On app start, `Unex.Dispatcher` listens on `127.0.0.1:0` and spawns `ucm run.compiled $UNEX_DISPATCHER`. The Unison program reads `UNEX_DISPATCHER_PORT` from its environment, connects back via `Socket.client`, and enters a request loop. Elixir accepts the one incoming connection.
+**Boot:** On app start, `Unex.Dispatcher.Pool` starts N `Unex.Dispatcher` workers (N = `:dispatcher_pool_size`, default 4, env: `UNEX_DISPATCHER_POOL_SIZE`). Each worker listens on `127.0.0.1:0` and spawns `ucm run.compiled $UNEX_DISPATCHER`. The Unison program reads `UNEX_DISPATCHER_PORT` from its environment, connects back via `Socket.client`, and enters a request loop. Elixir accepts the one incoming connection per worker.
 
 **Per request (`POST /services/:name/call` or `GET /<name>`):**
 
 1. `Services.Registry.resolve(name)` returns the current root-value hash. On a node that doesn't own the entry, the registry GenServer falls back to `ask_peers(Node.list(), name)` and `GenServer.call({Registry, peer}, {:lookup, name})` on each connected peer until one answers.
 2. `SyncServer.resolve([hash])` returns the serialized `Value` bytes. Local `HashCache` first; on miss, `ask_peers` does `GenServer.call({SyncServer, peer}, {:fetch_local, hash})` on each connected peer. Anything fetched is immediately `HashCache.put`'d so the next call is local.
-3. `Unex.Dispatcher.eval` sends `<<len::8, value_bytes>>` over the protocol socket to the local dispatcher.
-4. The Unison dispatcher `Value.deserialize`s, `Value.load`s as a `'{IO, Exception} ()` thunk, and **iteratively satisfies missing `Code` deps** by issuing `GET /code/:termhash` back to its own node's API (the URL was wired in at dispatcher boot). The handler is `CodeController.get/2`, which itself goes through `SyncServer.resolve/1` — so a `Code` blob the local node has never seen is also pulled from peers on demand. Fetched codes are `Code.cache_`'d; `Value.load` is retried until all deps resolve.
-5. The thunk runs for its side effects. Anything the user program writes to `stdout` is captured by Elixir from the subprocess's pipe (the protocol is on a separate socket, so `printLine` is free to use stdout).
-6. On completion, the dispatcher sends an OK response frame. Elixir wraps the accumulated stdout in `%Runner.Result{stdout: ..., stderr: "", exit_code: 0}` and returns it to the caller.
+3. `Unex.Dispatcher.Pool.eval` checks out a free worker from the pool. If all workers are busy the caller blocks until one is free or the timeout elapses (`{:error, :pool_timeout}`).
+4. The checked-out `Unex.Dispatcher` sends `<<len::8, value_bytes>>` over its protocol socket to its UCM subprocess.
+5. The Unison dispatcher `Value.deserialize`s, `Value.load`s as a `'{IO, Exception} ()` thunk, and **iteratively satisfies missing `Code` deps** by issuing `GET /code/:termhash` back to its own node's API. Fetched codes are `Code.cache_`'d; `Value.load` is retried until all deps resolve.
+6. The thunk runs for its side effects. Anything the user program writes to `stdout` is captured by Elixir from the subprocess's pipe (the protocol is on a separate socket, so `printLine` is free to use stdout).
+7. On completion, the dispatcher sends an OK response frame. Elixir wraps the accumulated stdout in `%Runner.Result{stdout: ..., stderr: "", exit_code: 0}`, checks the worker back into the pool, and returns to the caller.
 
-Because the dispatcher is persistent, typical service calls complete in single-digit milliseconds instead of the several seconds a cold `ucm run.compiled` takes.
+Because dispatchers are persistent, typical service calls complete in single-digit milliseconds instead of the several seconds a cold `ucm run.compiled` takes.
 
-**Concurrency.** The dispatcher is currently single-inflight — calls queue on the GenServer. Adding a pool is a future concern.
+**Concurrency.** Up to N concurrent calls execute simultaneously without head-of-line blocking. Additional callers queue inside NimblePool until a worker is free.
 
 **Remote nodes.** `Services.call` with `:node` opts RPCs `eval_local/2` on the target node, which has its own local dispatcher. By default the call stays local: every node can serve any service because both the registry entry and the code blobs are reachable on demand through the layers above.
 

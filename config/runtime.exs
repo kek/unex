@@ -78,6 +78,7 @@ if config_env() != :test do
   end
 
   dispatcher_path = System.get_env("UNEX_DISPATCHER") || Map.get(file_config, :dispatcher_path)
+  pool_size = get_int.("UNEX_DISPATCHER_POOL_SIZE", :dispatcher_pool_size, 4)
 
   # --- Apply config ---
   config :unex,
@@ -90,6 +91,7 @@ if config_env() != :test do
     api_secret: api_secret,
     ucm_path: get.("UCM_PATH", :ucm_path, "ucm"),
     dispatcher_path: dispatcher_path,
+    dispatcher_pool_size: pool_size,
     peers: peers,
     node_name: node_name,
     cookie: cookie,

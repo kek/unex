@@ -50,10 +50,10 @@ defmodule Unex.Integration.ServiceLifecycleTest do
     old_api_port = Application.get_env(:unex, :api_port)
     Application.put_env(:unex, :api_port, port)
 
-    {:ok, dispatcher_pid} = Unex.Dispatcher.start_link()
+    {:ok, pool_pid} = Unex.Dispatcher.Pool.start_link()
 
     on_exit(fn ->
-      if Process.alive?(dispatcher_pid), do: GenServer.stop(dispatcher_pid, :normal, 5_000)
+      if Process.alive?(pool_pid), do: GenServer.stop(pool_pid, :normal, 10_000)
       Process.exit(bandit_pid, :normal)
       :mnesia.stop()
       File.rm_rf!(mnesia_dir)
@@ -136,14 +136,15 @@ defmodule Unex.Integration.ServiceLifecycleTest do
     assert second_n == first_n + 1,
            "expected counter to advance by 1 on second call (was #{first_n}, got #{second_n})"
 
-    # ---- Verify only one UCM subprocess is running ----
+    # ---- Verify exactly pool_size UCM subprocesses are running ----
     {ps_out, 0} =
       System.cmd("pgrep", ["-f", "ucm run.compiled"], stderr_to_stdout: true)
 
     ucm_count = ps_out |> String.split("\n", trim: true) |> length()
+    pool_size = Application.get_env(:unex, :dispatcher_pool_size, 4)
 
-    assert ucm_count == 1,
-           "expected exactly one UCM subprocess for the whole session, found #{ucm_count}"
+    assert ucm_count == pool_size,
+           "expected #{pool_size} UCM subprocess(es) (pool_size=#{pool_size}), found #{ucm_count}"
   end
 
   # Minimal dependency-free HTTP/1.1 client over :gen_tcp. Small request bodies

@@ -4,6 +4,7 @@ import Config
 config :unex,
   start_api: false,
   start_dispatcher: false,
+  dispatcher_pool_size: 1,
   mnesia_dir: nil,
   blobs_dir: nil,
   hash_cache_dir: nil,

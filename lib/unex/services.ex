@@ -5,8 +5,8 @@ defmodule Unex.Services do
   A service is a Unison thunk registered under a human-readable name. Deploys
   pull the project, extract a serialized `Value` for the entry point plus all
   transitively reachable `Code` bytes, and store them in the cluster's shared
-  `HashCache`. Calls dispatch the root `Value` through a long-lived
-  `Unex.Dispatcher` process which evaluates it and fetches missing `Code`
+  `HashCache`. Calls dispatch the root `Value` through a pool of long-lived
+  `Unex.Dispatcher` processes via `Unex.Dispatcher.Pool` which evaluates it and fetches missing `Code`
   on demand via `GET /code/:termhash`.
   """
 
@@ -49,18 +49,18 @@ defmodule Unex.Services do
 
   @doc """
   Resolves the root `Value` bytes for a service hash and hands them to the
-  local `Unex.Dispatcher` for evaluation. Public because it is called via
+  local `Unex.Dispatcher.Pool` for evaluation. Public because it is called via
   RPC from remote nodes.
   """
   def eval_local(hash, timeout) do
     cond do
-      not Unex.Dispatcher.running?() ->
+      not Unex.Dispatcher.Pool.available?() ->
         {:error, :dispatcher_not_started}
 
       true ->
         with {:ok, resolved} <- SyncServer.resolve([hash]),
              data when is_binary(data) <- Map.get(resolved, hash) do
-          case Unex.Dispatcher.eval(Unex.Dispatcher, data, timeout) do
+          case Unex.Dispatcher.Pool.eval(data, timeout) do
             {:ok, text} -> {:ok, %Result{stdout: text, stderr: "", exit_code: 0}}
             {:error, reason} -> {:error, reason}
           end
