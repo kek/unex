@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(ucm version:*)",
-      "Bash(ucm --version)"
-    ]
-  }
-}
