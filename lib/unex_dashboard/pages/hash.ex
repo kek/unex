@@ -6,6 +6,7 @@ defmodule Unex.Dashboard.Pages.Hash do
   alias Unex.Cluster.HashCache
   alias Unex.Cluster.NameCache
   alias Unex.Cluster.SourceCache
+  alias Unex.Dashboard.UnisonHighlight
   alias Unex.Services.Registry
 
   @impl true
@@ -75,7 +76,11 @@ defmodule Unex.Dashboard.Pages.Hash do
     </.card>
 
     <.card :if={@cached_source} title="Source (cached from UCM)">
-      <pre style="white-space: pre-wrap; word-break: break-word;">{Phoenix.HTML.raw(linkify_source(@socket, @page, @cached_source))}</pre>
+      {Phoenix.HTML.raw(unison_highlight_styles())}
+      <pre
+        class="unison-src"
+        style="white-space: pre-wrap; word-break: break-word;"
+      >{Phoenix.HTML.raw(highlight_source(@socket, @page, @cached_source))}</pre>
     </.card>
 
     <.card
@@ -200,33 +205,44 @@ defmodule Unex.Dashboard.Pages.Hash do
     :exit, _ -> nil
   end
 
-  # Tokenizes pretty-printed Unison source and wraps any identifier that
-  # exactly matches a known name (from the deploy's name → hash map) in an
-  # `<a>` to its hash page. Everything else is HTML-escaped. Conservative
-  # by design: only exact full-path matches qualify, so locals, type
-  # constructors, and partially-qualified mentions stay as plain text.
-  defp linkify_source(socket, page, source) when is_binary(source) do
+  # Syntax-highlights pretty-printed Unison source and, on top of that, wraps
+  # any identifier whose exact full-path name is known (from the deploy's
+  # name → hash map) in an `<a>` to its hash page. Highlighting is done by
+  # `UnisonHighlight`, which HTML-escapes every token; the `:link` function
+  # below turns known names into navigable references. Conservative by design:
+  # only exact full-path matches qualify, so locals, unknown constructors, and
+  # partially-qualified mentions stay as plain (still coloured) text.
+  defp highlight_source(socket, page, source) when is_binary(source) do
     name_to_hash = name_to_hash_map()
-    identifier = ~r/[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)*/u
 
-    {acc, last} =
-      identifier
-      |> Regex.scan(source, return: :index)
-      |> Enum.reduce({[], 0}, fn [{start, len}], {acc, pos} ->
-        gap = binary_part(source, pos, start - pos)
-        token = binary_part(source, start, len)
+    link = fn token ->
+      case Map.get(name_to_hash, token) do
+        nil -> nil
+        hash -> hash_url(socket, page, hash)
+      end
+    end
 
-        piece =
-          case Map.get(name_to_hash, token) do
-            nil -> h(token)
-            hash -> token_link(socket, page, hash, token)
-          end
+    UnisonHighlight.to_html(source, link: link)
+  end
 
-        {[acc, h(gap), piece], start + len}
-      end)
-
-    trailing = binary_part(source, last, byte_size(source) - last)
-    IO.iodata_to_binary([acc, h(trailing)])
+  # Scoped colour rules for the highlighter's token classes. Emitted once,
+  # alongside the source block; tuned for LiveDashboard's light card surface.
+  defp unison_highlight_styles do
+    """
+    <style>
+      pre.unison-src .unison-keyword { color: #d73a49; font-weight: 600; }
+      pre.unison-src .unison-type { color: #6f42c1; }
+      pre.unison-src .unison-string { color: #032f62; }
+      pre.unison-src .unison-number { color: #005cc5; }
+      pre.unison-src .unison-comment { color: #6a737d; font-style: italic; }
+      pre.unison-src .unison-doc { color: #22863a; }
+      pre.unison-src .unison-operator { color: #d73a49; }
+      pre.unison-src .unison-hash { color: #e36209; }
+      pre.unison-src .unison-ref { color: inherit; }
+      pre.unison-src a.unison-ref { text-decoration: underline; }
+      pre.unison-src a.unison-ref.unison-type { color: #6f42c1; }
+    </style>
+    """
   end
 
   defp name_to_hash_map do
@@ -236,17 +252,14 @@ defmodule Unex.Dashboard.Pages.Hash do
     :exit, _ -> %{}
   end
 
-  defp token_link(socket, page, hash, token) do
-    url =
-      Phoenix.LiveDashboard.PageBuilder.live_dashboard_path(
-        socket,
-        :hash,
-        page.node,
-        %{},
-        %{"id" => hash}
-      )
-
-    ~s[<a href="#{h(url)}">#{h(token)}</a>]
+  defp hash_url(socket, page, hash) do
+    Phoenix.LiveDashboard.PageBuilder.live_dashboard_path(
+      socket,
+      :hash,
+      page.node,
+      %{},
+      %{"id" => hash}
+    )
   end
 
   defp h(s), do: s |> to_string() |> Phoenix.HTML.html_escape() |> Phoenix.HTML.safe_to_string()
