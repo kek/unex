@@ -4,6 +4,11 @@ defmodule Unex.Dashboard.BasicAuth do
   application config (`:dashboard_username`, `:dashboard_password`) on
   every request so that runtime-config changes take effect. Tests can
   override by passing `username:`/`password:` as plug opts.
+
+  Fails closed: if either credential is unset or blank — which is what
+  `Unex.Dashboard.Credentials` leaves behind on a production node that did not
+  enable the dashboard — every request is rejected instead of being compared
+  against a missing value.
   """
 
   import Plug.Conn
@@ -20,7 +25,8 @@ defmodule Unex.Dashboard.BasicAuth do
     u = uo || Application.get_env(:unex, :dashboard_username)
     p = po || Application.get_env(:unex, :dashboard_password)
 
-    with ["Basic " <> encoded] <- get_req_header(conn, "authorization"),
+    with true <- configured?(u) and configured?(p),
+         ["Basic " <> encoded] <- get_req_header(conn, "authorization"),
          {:ok, decoded} <- Base.decode64(encoded),
          [user, pass] <- String.split(decoded, ":", parts: 2),
          true <- Plug.Crypto.secure_compare(user, u) and Plug.Crypto.secure_compare(pass, p) do
@@ -29,6 +35,9 @@ defmodule Unex.Dashboard.BasicAuth do
       _ -> unauthorized(conn, realm)
     end
   end
+
+  defp configured?(value) when is_binary(value), do: String.trim(value) != ""
+  defp configured?(_), do: false
 
   defp unauthorized(conn, realm) do
     conn

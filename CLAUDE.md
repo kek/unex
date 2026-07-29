@@ -76,7 +76,15 @@ Dashboard env vars:
 - `UNEX_DASHBOARD` — set to `1`/`true` to enable the dashboard subsystem
 - `UNEX_DASHBOARD_PORT` — dashboard HTTP port (default 4041)
 - `UNEX_DASHBOARD_HOST` — bind address (default `127.0.0.1`; set to `0.0.0.0` to expose on all interfaces)
-- `UNEX_DASHBOARD_USER`, `UNEX_DASHBOARD_PASS` — Basic Auth credentials
+- `UNEX_DASHBOARD_USER`, `UNEX_DASHBOARD_PASS` — Basic Auth credentials. They
+  default to `admin`/`unex` in dev and test only. In `:prod` with the dashboard
+  enabled they are **required**: `Unex.Dashboard.Credentials.resolve!/2` raises
+  from `config/runtime.exs` rather than let a release serve a guessable login.
+  Re-adding a fallback there re-opens the hole —
+  `test/unex_dashboard/runtime_config_test.exs` evaluates the real `runtime.exs`
+  per env and will fail.
+- `UNEX_DASHBOARD_SECRET` — dashboard session cookie signing key; a random one is
+  generated per boot when unset
 
 ## Test Structure
 

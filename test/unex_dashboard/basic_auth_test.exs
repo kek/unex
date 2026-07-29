@@ -39,6 +39,18 @@ defmodule Unex.Dashboard.BasicAuthTest do
     refute conn.halted
   end
 
+  test "fails closed on a blank configured password" do
+    creds = Base.encode64("u:")
+
+    conn =
+      conn(:get, "/")
+      |> put_req_header("authorization", "Basic #{creds}")
+      |> call(username: "u", password: "")
+
+    assert conn.status == 401
+    assert conn.halted
+  end
+
   test "rejects right-length-but-wrong-value password" do
     creds = Base.encode64("u:q")
 
