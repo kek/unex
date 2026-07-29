@@ -104,11 +104,22 @@ if config_env() != :test do
       _ -> Map.get(file_config, :start_dashboard, false)
     end
 
+  # Basic Auth credentials. Note the `nil` defaults: the dev/test fallback lives
+  # in Unex.Dashboard.Credentials, NOT here, so the production path cannot
+  # inherit the admin/unex pair compiled into config/config.exs. In :prod with
+  # the dashboard enabled, resolve!/2 raises instead of falling back.
+  {dashboard_username, dashboard_password} =
+    Unex.Dashboard.Credentials.resolve!(config_env(),
+      username: get.("UNEX_DASHBOARD_USER", :dashboard_username, nil),
+      password: get.("UNEX_DASHBOARD_PASS", :dashboard_password, nil),
+      dashboard_enabled?: dashboard_enabled
+    )
+
   config :unex,
     start_dashboard: dashboard_enabled,
     dashboard_port: get_int.("UNEX_DASHBOARD_PORT", :dashboard_port, 4041),
-    dashboard_username: get.("UNEX_DASHBOARD_USER", :dashboard_username, "admin"),
-    dashboard_password: get.("UNEX_DASHBOARD_PASS", :dashboard_password, "unex")
+    dashboard_username: dashboard_username,
+    dashboard_password: dashboard_password
 
   dashboard_host =
     case get.("UNEX_DASHBOARD_HOST", :dashboard_host, "127.0.0.1") do
@@ -140,15 +151,25 @@ if config_env() != :test do
       _ -> false
     end
 
+  # Session-cookie signing key. The previous fallback hashed a constant plus the
+  # node name — public information, so anyone with this repo could forge
+  # dashboard sessions. Generate a random one instead; the only cost is that
+  # already-issued dashboard sessions do not survive a restart.
+  {dashboard_secret_key_base, dashboard_secret_generated?} =
+    Unex.Dashboard.Credentials.resolve_secret_key_base(System.get_env("UNEX_DASHBOARD_SECRET"))
+
   config :unex, Unex.Dashboard.Endpoint,
     adapter: Bandit.PhoenixAdapter,
     http: [ip: dashboard_host, port: get_int.("UNEX_DASHBOARD_PORT", :dashboard_port, 4041)],
     server: dashboard_enabled,
     url: url_opts,
     check_origin: check_origin,
-    secret_key_base:
-      System.get_env("UNEX_DASHBOARD_SECRET") ||
-        :crypto.hash(:sha256, "unex-dashboard-default-#{node()}") |> Base.encode16()
+    secret_key_base: dashboard_secret_key_base
+
+  if dashboard_enabled and dashboard_secret_generated? do
+    IO.puts("[unex] No dashboard secret configured. Generated a random one.")
+    IO.puts("[unex] Set UNEX_DASHBOARD_SECRET to keep dashboard sessions across restarts.")
+  end
 
   if key_generated? do
     IO.puts("[unex] No encryption key configured. Generated: #{encryption_key}")

@@ -28,10 +28,24 @@ cache distribution, service lifecycle, and runtime metrics.
 
 Enable it with:
 
-    UNEX_DASHBOARD=1 UNEX_DASHBOARD_USER=admin UNEX_DASHBOARD_PASS=secret iex -S mix run --no-halt
+    UNEX_DASHBOARD=1 iex -S mix run --no-halt
 
 It listens on port `:4041` by default and is protected by HTTP Basic Auth.
-Open `http://localhost:4041` in a browser.
+Open `http://localhost:4041` in a browser. In dev and test the credentials
+default to `admin` / `unex`.
+
+**In production there is no default.** A release built with `MIX_ENV=prod` that
+enables the dashboard must also set `UNEX_DASHBOARD_USER` and
+`UNEX_DASHBOARD_PASS`, or it refuses to boot — an ops dashboard behind a
+password published in this README is not worth serving. Setting
+`UNEX_DASHBOARD_SECRET` (session cookie signing key) is optional; without it a
+random one is generated per boot, which only costs open dashboard sessions on
+restart.
+
+    UNEX_DASHBOARD=1 \
+      UNEX_DASHBOARD_USER=ops \
+      UNEX_DASHBOARD_PASS="$(openssl rand -base64 24)" \
+      bin/unex start
 
 Routes:
 - `/` — landing page
@@ -109,8 +123,9 @@ Curl reference for every endpoint: **[docs/api.md](docs/api.md)**
 | `UNEX_DASHBOARD` | *(off)* | Set to `1`/`true`/`yes` to enable the Phoenix LiveView dashboard |
 | `UNEX_DASHBOARD_PORT` | `4041` | Dashboard HTTP port |
 | `UNEX_DASHBOARD_HOST` | `127.0.0.1` | Dashboard bind address; set to `0.0.0.0` to expose on all interfaces |
-| `UNEX_DASHBOARD_USER` | `admin` | Basic Auth username for the dashboard |
-| `UNEX_DASHBOARD_PASS` | `unex` | Basic Auth password for the dashboard |
+| `UNEX_DASHBOARD_USER` | `admin` in dev/test, **required in prod** | Basic Auth username for the dashboard |
+| `UNEX_DASHBOARD_PASS` | `unex` in dev/test, **required in prod** | Basic Auth password for the dashboard |
+| `UNEX_DASHBOARD_SECRET` | *(generated)* | Signing key for dashboard session cookies |
 
 Config file: `~/.config/unex/config.exs`, `/etc/unex/config.exs`, or `UNEX_CONFIG`. See `config.example.exs` for a full reference.
 
