@@ -24,6 +24,12 @@ defmodule Unex.Integration.ServiceLifecycleTest do
 
   @dispatcher_uc "data/dispatcher.uc"
 
+  # `@kek/counter` on Share renders "Visitory" — a typo in the published
+  # project, not in this test. Matching what Share actually serves keeps a
+  # failure here meaningful; if the project is ever corrected, this is the one
+  # line that has to move.
+  @counter_heading ~r|<h1>Visitory #(\d+)</h1>|
+
   setup_all do
     unless File.exists?(@dispatcher_uc) do
       IO.puts("Building #{@dispatcher_uc} — this takes a minute...")
@@ -106,7 +112,7 @@ defmodule Unex.Integration.ServiceLifecycleTest do
            "web fetch failed (status=#{web_status}): #{web_body}"
 
     assert web_body =~ ~r|<!DOCTYPE html>|i
-    assert web_body =~ ~r|<h1>Visitor #\d+</h1>|
+    assert web_body =~ @counter_heading
     assert web_body =~ ~r|</body></html>|
 
     assert Enum.any?(web_headers, fn {k, v} ->
@@ -116,7 +122,7 @@ defmodule Unex.Integration.ServiceLifecycleTest do
 
     # ---- Fetch /counter again, verify counter incremented ----
     first_n =
-      Regex.run(~r|<h1>Visitor #(\d+)</h1>|, web_body)
+      Regex.run(@counter_heading, web_body)
       |> List.last()
       |> String.to_integer()
 
@@ -129,7 +135,7 @@ defmodule Unex.Integration.ServiceLifecycleTest do
       )
 
     second_n =
-      Regex.run(~r|<h1>Visitor #(\d+)</h1>|, web_body_2)
+      Regex.run(@counter_heading, web_body_2)
       |> List.last()
       |> String.to_integer()
 

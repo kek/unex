@@ -36,4 +36,37 @@ defmodule Unex.ServicesReleaseTest do
     {:ok, resolved} = Registry.resolve("ghost-svc")
     assert resolved.hash == "nonexistent-hash-abc"
   end
+
+  describe "provenance across releases" do
+    test "a bare release keeps the project and entry point of the last deploy" do
+      h1 = HashCache.put("prov_v1_#{System.unique_integer()}")
+      h2 = HashCache.put("prov_v2_#{System.unique_integer()}")
+
+      {:ok, _} =
+        Services.release("prov-svc", h1, project: "@kek/counter", entry_point: "mainCounter")
+
+      {:ok, entry} = Services.release("prov-svc", h2)
+
+      assert entry.project == "@kek/counter"
+      assert entry.entry_point == "mainCounter"
+    end
+
+    # A local-file deploy has no `ucm pull` argument, so it records
+    # `project: nil` on purpose. Inheriting the previous Share project there
+    # would make the dashboard link a local build to somebody else's Share page,
+    # so an explicitly-passed nil has to win over the merge.
+    test "an explicit nil project clears a stale Share link" do
+      h1 = HashCache.put("prov_share_#{System.unique_integer()}")
+      h2 = HashCache.put("prov_local_#{System.unique_integer()}")
+
+      {:ok, _} =
+        Services.release("prov-local", h1, project: "@kek/counter", entry_point: "mainCounter")
+
+      {:ok, entry} =
+        Services.release("prov-local", h2, project: nil, entry_point: "mainCounter")
+
+      assert entry.project == nil
+      assert entry.entry_point == "mainCounter"
+    end
+  end
 end

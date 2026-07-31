@@ -113,16 +113,9 @@ defmodule Mix.Tasks.Unex.Dev do
   # --- configuration -------------------------------------------------------
 
   # Same precedence production uses: an explicit flag, then the environment,
-  # then a default. The default is under XDG rather than `./data` so a dev node
-  # does not scribble into the checkout.
-  defp resolve_data_dir(opts) do
-    raw =
-      opts[:data] ||
-        System.get_env("UNEX_DATA") ||
-        Path.join([System.user_home!(), ".local", "share", "unex", "dev"])
-
-    Path.expand(raw)
-  end
+  # then a default. Lives in `Unex.Dev` so `mix unex.deploy` resolves the same
+  # directory and finds the credentials this task persists there.
+  defp resolve_data_dir(opts), do: Unex.Dev.data_dir(opts[:data])
 
   # Persisted values are defaults, not overrides: a variable already exported in
   # the shell still wins, which is the precedence config/runtime.exs documents.

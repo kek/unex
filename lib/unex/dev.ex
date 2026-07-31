@@ -33,6 +33,34 @@ defmodule Unex.Dev do
   @doc "Environment variables a dev node carries across restarts."
   def persisted_vars, do: @persisted_vars
 
+  @doc """
+  Resolves which data directory a dev node uses: an explicit override, then
+  `UNEX_DATA`, then `~/.local/share/unex/dev`.
+
+  The default is under XDG rather than `./data` so a dev node does not scribble
+  into the checkout. `mix unex.dev` and `mix unex.deploy` both call this, which
+  is what lets `mix unex.deploy` find the credentials the node wrote down
+  without being told where to look.
+  """
+  @spec data_dir(Path.t() | nil) :: Path.t()
+  def data_dir(override \\ nil) do
+    (present(override) || present(System.get_env("UNEX_DATA")) || default_data_dir())
+    |> Path.expand()
+  end
+
+  defp default_data_dir do
+    Path.join([System.user_home!(), ".local", "share", "unex", "dev"])
+  end
+
+  defp present(value) when is_binary(value) do
+    case String.trim(value) do
+      "" -> nil
+      trimmed -> trimmed
+    end
+  end
+
+  defp present(_), do: nil
+
   # ---------------------------------------------------------------------------
   # Dispatcher bundle version
   # ---------------------------------------------------------------------------

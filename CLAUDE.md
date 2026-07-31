@@ -12,6 +12,8 @@ An ops platform for [Unison](https://www.unison-lang.org/) programs. Two-layer a
 
 ```bash
 mix deps.get                    # Install dependencies
+mix unex.dev                    # Local dev node: preflight UCM, stable creds, banner
+mix unex.deploy f.u main --as s  # Deploy a local .u to a running node (no Share)
 iex -S mix run --no-halt        # Start server (API on :4040), drop into iex
 mix run --no-halt               # Same, no shell
 mix test                        # Run all tests
@@ -43,7 +45,7 @@ Always started: `HashCache`, `SyncServer`, `Services.Registry`, `Scratch`, `Log`
 ### Execution flow
 `Unex.eval/2` and `Unex.compile_and_run/2` are the top-level API for one-shot source runs. Both create an ephemeral `Workspace` (isolated Unison codebase in tmp), then either run source directly via `Runner.run_file` or compile to `.uc` bytecode via `Compiler` first.
 
-Deployed services use a different path. At deploy time, `Runtime.extract/2` pulls the project into the persistent codebase and generates a per-deploy extractor `.u` that runs under `ucm run.file`, emitting a serialized root `Value` plus every transitively reachable `Code` (one file per `Link.Term` hash). Elixir stores the root value in `HashCache` by SHA256 and each `Code` blob under its `Link.Term` hash. At call time, `Services.call` hands the root value bytes to `Unex.Dispatcher` — a long-lived `ucm run.compiled dispatcher.uc` subprocess that speaks a length-prefixed protocol over a localhost TCP socket. The dispatcher fetches missing `Code` via HTTP `GET /code/:termhash` back to Elixir, `Code.cache_`s it, and evaluates the thunk. Stdout from the subprocess is captured and returned as the service's result; the protocol socket is separate so user `printLine` doesn't corrupt it.
+Deployed services use a different path. At deploy time, `Runtime.extract/3` ingests the source into the persistent codebase and generates a per-deploy extractor `.u` that runs under `ucm run.file`, emitting a serialized root `Value` plus every transitively reachable `Code` (one file per `Link.Term` hash). Source enters the codebase one of two ways, and that is the *only* difference between the two deploy paths: `{:share, project}` runs `pull` (what a production deploy does) and `{:file, path}` runs `load` + `update` (what `mix unex.deploy` does). Everything after `Runtime.ingest_commands/1` is shared, so the same code deployed either way lands under the same root hash — asserted against Unison Share in `test/integration/deploy_local_file_test.exs`. A file deploy also skips the dashboard source-capture stages by default (`Runtime.capture_source?/2`), which is most of deploy wall time and none of the deployed bytes. Elixir stores the root value in `HashCache` by SHA256 and each `Code` blob under its `Link.Term` hash. At call time, `Services.call` hands the root value bytes to `Unex.Dispatcher` — a long-lived `ucm run.compiled dispatcher.uc` subprocess that speaks a length-prefixed protocol over a localhost TCP socket. The dispatcher fetches missing `Code` via HTTP `GET /code/:termhash` back to Elixir, `Code.cache_`s it, and evaluates the thunk. Stdout from the subprocess is captured and returned as the service's result; the protocol socket is separate so user `printLine` doesn't corrupt it.
 
 ### Storage layer (`lib/unex/storage/`)
 All backed by Mnesia disc copies. `Schema` initializes tables on boot. `Database` is a logical namespace. `OrderedTable` provides sorted key-value (Mnesia ordered_set). `Cell` stores single named values. `Transaction` wraps multiple ops atomically.
@@ -59,7 +61,7 @@ Plug router dispatches to controllers. `Auth` plug enforces bearer token (`Autho
 
 ### Unison ability library (`unison/`)
 `.u` files define abilities and HTTP-backed handlers. All handlers take `baseUrl` and `secret` parameters for authenticated HTTP calls. `Main.u` composes all handlers. `Examples/` has working programs. These files are meant to be copied into Unison projects.
-`Services.u` deploy handler sends the function name + Share project to the server. The server's `Runtime` GenServer pulls from Unison Share and runs a generated extractor, storing the serialized `Value` + transitive `Code` blobs in `HashCache`. Service entry points must be thunks of type `'{IO, Exception} ()` (the dispatcher runs them for side effects and captures stdout as the result).
+`Services.u` deploy handler sends the function name + Share project to the server, unchanged by the local-file path — `mix unex.deploy` is a second client of the same endpoint, not a second endpoint. The server's `Runtime` GenServer pulls from Unison Share and runs a generated extractor, storing the serialized `Value` + transitive `Code` blobs in `HashCache`. Service entry points must be thunks of type `'{IO, Exception} ()` (the dispatcher runs them for side effects and captures stdout as the result).
 
 `Dispatcher.u` is the long-lived evaluator that runs as `ucm run.compiled dispatcher.uc` — rebuild with `mix unex.compile_dispatcher` after changing it.
 

@@ -160,6 +160,30 @@ change the *meaning* of a passing local run".
   are 94% of deploy time (above). Skipping them locally is the single biggest
   legitimate speed knob, because nothing about program behaviour depends on
   them — the deployed `Value` and `Code` bytes are identical either way.
+
+  Slice 2 took that knob and set it by ingestion mode: **off for `{:file, _}`,
+  on for `{:share, _}`.** Both defaults are overridable (`--capture-source` /
+  `--no-capture-source`, or `"capture_source"` in the deploy body), and the entry
+  point's own source is captured on both paths regardless because it comes free
+  in the same UCM session as the closure walk — so `/hash/<root>` still shows the
+  program you deployed, just not every term underneath it.
+
+  The two levers turn out to be separable, and worth separating. Measured on this
+  bench, same `mainCounter`, one deploy each:
+
+  | | stage 1 (ingest + walk) | stages 2–3 | total |
+  |---|---|---|---|
+  | `{:share, "@kek/counter"}`, capture on | 13.2 s | 60.1 s | **73.9 s** |
+  | `{:file, "counter.u"}`, capture on | 4.4 s | 50.9 s | **56.3 s** |
+  | `{:file, "counter.u"}`, capture off | 4.7 s | — | **5.1 s** |
+
+  So killing the Share round trip is worth about 9 seconds and skipping source
+  capture is worth about 51 — together, 14× on the inner loop. Doing only the
+  first would have been a hollow win, which is why this slice did both. And the
+  claim that skipping it changes nothing about the deployed bytes is not an
+  argument in this document: it is an assertion in
+  `test/integration/deploy_local_file_test.exs`, which extracts the same file
+  with capture off and on and compares the root value and every `Code` blob.
 - **The dashboard itself.** Off unless asked for.
 - **Credential generation.** Dev mode may pin a stable secret so restarts do not
   invalidate encrypted values — that is *more* durable than production default
@@ -325,7 +349,7 @@ packaging (not Burrito) if and when a user without a repo checkout appears.**
 
 Each slice is independently useful and independently validated.
 
-**Slice 1 — `mix unex.dev`: one command, a correct node.** *(this commission)*
+**Slice 1 — `mix unex.dev`: one command, a correct node.** *(delivered)*
 Preflight UCM and report its version; resolve a dev data directory and set
 `data_dir` so the runtime codebase, dispatcher bundle and Mnesia stop
 disagreeing; persist the generated `UNEX_SECRET` / `UNEX_CONFIG_KEY` so restarts
@@ -339,13 +363,39 @@ version comparison and the credential file; and a real boot with `/health` and
 `/services` answering.
 
 **Slice 2 — `mix unex.deploy <file.u> <entry> --as <name>`: kill the Share round
-trip.** Parameterise `Runtime.extract` on how source enters the codebase —
-`{:share, project}` (today, unchanged) or `{:file, path}` (`load` + `update`) —
-leaving the extractor, closure walk and `HashCache` keying untouched. Same
-`POST /services/:name/deploy` endpoint with a new body field, so the Unison
+trip.** *(delivered)* Parameterise `Runtime.extract` on how source enters the
+codebase — `{:share, project}` (today, unchanged) or `{:file, path}` (`load` +
+`update`) — leaving the extractor, closure walk and `HashCache` keying untouched.
+Same `POST /services/:name/deploy` endpoint with a new body field, so the Unison
 `Unex.Services.deploy` ability and the HTTP API stay as they are. Validated by:
 deploying a local `.u`, calling `GET /<name>`, and asserting the root hash equals
 the hash the Share path produces for the same code.
+
+As built, the one parameter is `Unex.Runtime.ingest_commands/1` — two clauses,
+`pull <project>` and `load <path>` + `update` — with `extract_commands/3`
+building the rest of the UCM session around it. A unit test asserts the two
+command scripts are identical apart from that prefix; that is the cheap
+structural guard. The expensive one is the hash equality above, and it holds:
+`@kek/counter`'s `mainCounter` from Share and the same code transcribed into a
+local `.u` produce the same root hash and the same 522 `Code` blobs, byte for
+byte, extracted against two separate codebases where the file half's codebase
+had never seen the Share project.
+
+The new body field is `"source"`, carrying the file's *text* rather than a path,
+so the endpoint does not assume the client shares a filesystem with the server
+and an API token does not become "read any file on the box". The server writes it
+to a temporary `.u`, because UCM ingests source through `load <path>`.
+
+Two consequences worth knowing. A file deploy records `project: nil` in the
+service registry, because `project` is a `ucm pull` argument and a file has no
+such thing — so the dashboard shows no source link for it, and deploying a file
+over a name previously deployed from Share *clears* the old link rather than
+leaving it pointing at code that is no longer running. And the residual risk §4b
+names is real and unmitigated: names in a `load`ed file resolve against whatever
+`lib` versions this codebase happens to have, so a program can hash locally to
+something Share would not reproduce if those versions differ. The equivalence
+test is what catches that, and it catches it as an inequality of hashes rather
+than as a mystery in production.
 
 **Slice 3 — `mix unex.watch`: the actual inner loop.** Watch a `.u` file,
 re-deploy on save, print the new hash and the time taken. Slice 2 makes this

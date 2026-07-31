@@ -2,8 +2,20 @@ defmodule Unex.Runtime do
   @moduledoc """
   Manages a persistent UCM codebase for server-side compilation.
 
-  On deploy, pulls a project from Unison Share into the local codebase,
-  compiles the entry point to .uc bytecode, and returns the bytes.
+  On deploy, source is ingested into that codebase and the entry point is
+  extracted as a serialized root `Value` plus its transitively reachable `Code`
+  bytes. Source enters the codebase one of two ways, and that is the *only*
+  difference between the two deploy paths:
+
+    * `{:share, project}` — `pull` from Unison Share, what a production deploy
+      does;
+    * `{:file, path}` — `load` a local `.u` file and `update`, which is what
+      makes `mix unex.deploy` possible without a Share round trip.
+
+  Everything downstream of `ingest_commands/1` — the generated extractor, the
+  closure walk, the `##builtin` skipping, the `HashCache` keying — is shared, so
+  the same code deployed either way produces the same root hash. There is
+  deliberately no second extraction path.
   """
 
   use GenServer
@@ -29,20 +41,45 @@ defmodule Unex.Runtime do
     GenServer.call(server, {:compile, project, hash}, @compile_timeout)
   end
 
+  @typedoc """
+  Where a deploy's source comes from.
+
+    * `{:share, project}` — pull `project` from Unison Share.
+    * `{:file, path}` — load a local `.u` file into the codebase and `update`.
+  """
+  @type source :: {:share, String.t()} | {:file, Path.t()}
+
   @doc """
-  Pulls a project from Unison Share and extracts an entry point as a
+  Ingests source into the persistent codebase and extracts `entry_point` as a
   serialized `Value` plus its transitively reachable `Code` bytes.
+
+  `source` is a `t:source/0`; a bare binary is accepted as `{:share, project}`
+  so existing callers keep working.
 
   The `entry_point` must name a `'{IO, Exception} Text` thunk. Returns
   `{:ok, %{root_value: bytes, codes: %{term_text => code_bytes}}}` where
   `term_text` is the `Link.Term.toText` representation of each dep
   (including the leading `#`). Returns `{:error, reason}` on failure.
 
+  Options:
+
+    * `:capture_source` — whether to run the dashboard source-capture stages
+      (stages 2 and 3: enumerate every named term in the codebase, dump
+      name → hash, `view` each reachable one). Defaults to `true` for
+      `{:share, _}` and `false` for `{:file, _}`; see `capture_source?/2`.
+
   This is the deploy-time companion to `Unex.Dispatcher`, which evaluates
   the `root_value` at call time and fetches `code` bytes on demand.
   """
-  def extract(server \\ __MODULE__, project, entry_point) do
-    GenServer.call(server, {:extract, project, entry_point}, @compile_timeout)
+  @spec extract(source() | String.t(), String.t(), keyword()) ::
+          {:ok, map()} | {:error, String.t()}
+  def extract(source, entry_point, opts \\ [])
+
+  def extract(project, entry_point, opts) when is_binary(project),
+    do: extract({:share, project}, entry_point, opts)
+
+  def extract(source, entry_point, opts) when is_tuple(source) do
+    GenServer.call(__MODULE__, {:extract, source, entry_point, opts}, @compile_timeout)
   end
 
   @impl true
@@ -64,8 +101,8 @@ defmodule Unex.Runtime do
     {:reply, result, state}
   end
 
-  def handle_call({:extract, project, entry_point}, _from, state) do
-    result = do_extract(state.codebase_path, project, entry_point)
+  def handle_call({:extract, source, entry_point, opts}, _from, state) do
+    result = do_extract(state.codebase_path, source, entry_point, opts)
     {:reply, result, state}
   end
 
@@ -99,128 +136,252 @@ defmodule Unex.Runtime do
     end
   end
 
-  defp do_extract(codebase_path, project, entry_point) do
-    cond do
-      not Regex.match?(~r/^[a-zA-Z0-9_.]+$/, entry_point) ->
-        {:error, "invalid entry_point: #{inspect(entry_point)}"}
+  defp do_extract(codebase_path, source, entry_point, opts) do
+    with :ok <- validate_entry_point(entry_point),
+         {:ok, source} <- validate_source(source) do
+      run_extract(codebase_path, source, entry_point, opts)
+    end
+  end
 
-      true ->
-        Logger.info("Runtime.extract: starting #{project}/#{entry_point}")
-        t_start = :os.system_time(:millisecond)
-        {:ok, ucm} = Unex.UCM.find()
-        unique = "#{:erlang.phash2(entry_point)}_#{:os.system_time(:millisecond)}"
-        out_dir = Path.join(System.tmp_dir!(), "unex_extract_#{unique}")
-        File.rm_rf!(out_dir)
-        File.mkdir_p!(out_dir)
+  defp run_extract(codebase_path, source, entry_point, opts) do
+    Logger.info("Runtime.extract: starting #{describe(source)}/#{entry_point}")
+    t_start = :os.system_time(:millisecond)
+    {:ok, ucm} = Unex.UCM.find()
+    unique = "#{:erlang.phash2(entry_point)}_#{:os.system_time(:millisecond)}"
+    out_dir = Path.join(System.tmp_dir!(), "unex_extract_#{unique}")
+    File.rm_rf!(out_dir)
+    File.mkdir_p!(out_dir)
 
-        extractor_path = Path.join(out_dir, "_extractor.u")
-        File.write!(extractor_path, extractor_source(entry_point, out_dir))
+    extractor_path = Path.join(out_dir, "_extractor.u")
+    File.write!(extractor_path, extractor_source(entry_point, out_dir))
 
-        commands =
-          "pull #{project}\n" <>
-            "load #{extractor_path}\n" <>
-            "run Unex.Extract.main\n" <>
-            "view #{entry_point}\n" <>
-            "exit\n"
+    commands = extract_commands(source, extractor_path, entry_point)
 
-        Logger.info("Runtime.extract: stage 1/3 — pulling project + walking deps")
-        t_walk_start = :os.system_time(:millisecond)
+    Logger.info("Runtime.extract: stage 1/3 — #{ingest_label(source)} + walking deps")
+    t_walk_start = :os.system_time(:millisecond)
 
-        port =
-          Port.open({:spawn_executable, ucm}, [
-            :binary,
-            :exit_status,
-            :stderr_to_stdout,
-            args: ["--codebase", codebase_path]
-          ])
+    port =
+      Port.open({:spawn_executable, ucm}, [
+        :binary,
+        :exit_status,
+        :stderr_to_stdout,
+        args: ["--codebase", codebase_path]
+      ])
 
-        send(port, {self(), {:command, commands}})
-        output = collect_output(port, "", @compile_timeout)
+    send(port, {self(), {:command, commands}})
+    output = collect_output(port, "", @compile_timeout)
+
+    Logger.info(
+      "Runtime.extract: stage 1/3 done in #{:os.system_time(:millisecond) - t_walk_start}ms"
+    )
+
+    root_path = Path.join(out_dir, "root.value")
+
+    try do
+      if File.exists?(root_path) do
+        root_value = File.read!(root_path)
+
+        files = File.ls!(out_dir)
+
+        codes =
+          files
+          |> Enum.filter(&String.ends_with?(&1, ".code"))
+          |> Enum.into(%{}, fn fname ->
+            term_text = String.replace_suffix(fname, ".code", "")
+            {term_text, File.read!(Path.join(out_dir, fname))}
+          end)
+
+        deps =
+          files
+          |> Enum.filter(&String.ends_with?(&1, ".deps"))
+          |> Enum.into(%{}, fn fname ->
+            key = String.replace_suffix(fname, ".deps", "")
+
+            dep_list =
+              Path.join(out_dir, fname)
+              |> File.read!()
+              |> String.split("\n", trim: true)
+
+            {key, dep_list}
+          end)
+
+        manifest_path = Path.join(out_dir, "manifest.txt")
+        manifest = if File.exists?(manifest_path), do: File.read!(manifest_path), else: ""
 
         Logger.info(
-          "Runtime.extract: stage 1/3 done in #{:os.system_time(:millisecond) - t_walk_start}ms"
+          "Runtime.extract: walked #{length(String.split(manifest, "\n", trim: true))} terms, wrote #{map_size(codes)} codes, #{map_size(deps)} dep entries"
         )
 
-        root_path = Path.join(out_dir, "root.value")
+        entry_source = parse_view_output(output, entry_point)
 
-        try do
-          if File.exists?(root_path) do
-            root_value = File.read!(root_path)
-
-            files = File.ls!(out_dir)
-
-            codes =
-              files
-              |> Enum.filter(&String.ends_with?(&1, ".code"))
-              |> Enum.into(%{}, fn fname ->
-                term_text = String.replace_suffix(fname, ".code", "")
-                {term_text, File.read!(Path.join(out_dir, fname))}
-              end)
-
-            deps =
-              files
-              |> Enum.filter(&String.ends_with?(&1, ".deps"))
-              |> Enum.into(%{}, fn fname ->
-                key = String.replace_suffix(fname, ".deps", "")
-
-                dep_list =
-                  Path.join(out_dir, fname)
-                  |> File.read!()
-                  |> String.split("\n", trim: true)
-
-                {key, dep_list}
-              end)
-
-            manifest_path = Path.join(out_dir, "manifest.txt")
-            manifest = if File.exists?(manifest_path), do: File.read!(manifest_path), else: ""
-
-            Logger.info(
-              "Runtime.extract: walked #{length(String.split(manifest, "\n", trim: true))} terms, wrote #{map_size(codes)} codes, #{map_size(deps)} dep entries"
-            )
-
-            source = parse_view_output(output, entry_point)
-
-            if source do
-              Logger.info(
-                "Runtime.extract: entry-point source cached: #{byte_size(source)} bytes"
-              )
-            else
-              Logger.warning("Runtime.extract: parse_view_output returned nil for #{entry_point}")
-            end
-
-            manifest_hashes = String.split(manifest, "\n", trim: true)
-            manifest_set = MapSet.new(manifest_hashes, &normalize_hash/1)
-
-            Logger.info("Runtime.extract: stage 2/3 — enumerating + resolving names")
-            t_names_start = :os.system_time(:millisecond)
-
-            %{sources: term_sources, names: hash_to_name} =
-              collect_named_term_sources(ucm, codebase_path, out_dir, manifest_set)
-
-            Logger.info(
-              "Runtime.extract: stage 2-3 done in #{:os.system_time(:millisecond) - t_names_start}ms — term_sources cached: #{map_size(term_sources)} of #{length(manifest_hashes)} manifest entries"
-            )
-
-            Logger.info(
-              "Runtime.extract: #{project}/#{entry_point} complete in #{:os.system_time(:millisecond) - t_start}ms"
-            )
-
-            {:ok,
-             %{
-               root_value: root_value,
-               codes: codes,
-               source: source,
-               deps: deps,
-               term_sources: term_sources,
-               names: hash_to_name
-             }}
-          else
-            {:error, "extraction failed. UCM output:\n#{output}"}
-          end
-        after
-          File.rm_rf!(out_dir)
+        if entry_source do
+          Logger.info(
+            "Runtime.extract: entry-point source cached: #{byte_size(entry_source)} bytes"
+          )
+        else
+          Logger.warning("Runtime.extract: parse_view_output returned nil for #{entry_point}")
         end
+
+        manifest_hashes = String.split(manifest, "\n", trim: true)
+        manifest_set = MapSet.new(manifest_hashes, &normalize_hash/1)
+
+        %{sources: term_sources, names: hash_to_name} =
+          maybe_collect_named_term_sources(
+            capture_source?(source, opts),
+            ucm,
+            codebase_path,
+            out_dir,
+            manifest_set,
+            length(manifest_hashes)
+          )
+
+        Logger.info(
+          "Runtime.extract: #{describe(source)}/#{entry_point} complete in #{:os.system_time(:millisecond) - t_start}ms"
+        )
+
+        {:ok,
+         %{
+           root_value: root_value,
+           codes: codes,
+           source: entry_source,
+           deps: deps,
+           term_sources: term_sources,
+           names: hash_to_name
+         }}
+      else
+        {:error, "extraction failed. UCM output:\n#{output}"}
+      end
+    after
+      File.rm_rf!(out_dir)
     end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Where source comes from, and what that costs
+  # ---------------------------------------------------------------------------
+
+  @doc false
+  # The ONLY thing that differs between a Share deploy and a local-file deploy:
+  # which UCM commands put the developer's definitions into the persistent
+  # codebase. Everything after this line — the generated extractor, the closure
+  # walk, the `##builtin` skipping, the `HashCache` keying — is shared, which is
+  # why the same code deployed either way mints the same root hash.
+  def ingest_commands({:share, project}), do: "pull #{project}\n"
+  def ingest_commands({:file, path}), do: "load #{path}\nupdate\n"
+
+  @doc false
+  # The complete session-1 command script. Exposed so a test can assert that
+  # swapping the source changes exactly `ingest_commands/1` and nothing else —
+  # the cheap structural guard against a second extraction path growing here.
+  def extract_commands(source, extractor_path, entry_point) do
+    ingest_commands(source) <>
+      "load #{extractor_path}\n" <>
+      "run Unex.Extract.main\n" <>
+      "view #{entry_point}\n" <>
+      "exit\n"
+  end
+
+  @doc false
+  # Whether to run the dashboard source-capture stages (2 and 3).
+  #
+  # Measured on a developer laptop: a `@kek/counter` deploy took 101 s, of which
+  # 95 s was stage 2 (`find` across 1766 named terms plus a name → hash dump)
+  # and stage 3 (a `view` per reachable term). The closure walk that actually
+  # produces the deployed bytes was ~6 s. Those stages feed `SourceCache` and
+  # `NameCache`, which exist to make the dashboard's `/hash/:id` page pretty;
+  # the root `Value` and the `Code` blobs are identical either way.
+  #
+  # So: `{:share, _}` — the production path — keeps them, and nothing about a
+  # real deploy changes. `{:file, _}` is the inner development loop, where 95 s
+  # per save buys a dashboard nobody is looking at, so it skips them. The entry
+  # point's own source is captured on both paths regardless, because it comes
+  # free in the same UCM session as the closure walk.
+  #
+  # Override either default with `capture_source: true | false`.
+  def capture_source?(source, opts \\ []) do
+    Keyword.get(opts, :capture_source, default_capture_source(source))
+  end
+
+  defp default_capture_source({:share, _}), do: true
+  defp default_capture_source({:file, _}), do: false
+
+  @doc false
+  # `entry_point` is interpolated into a UCM command line AND into generated
+  # Unison source, so it has to be a plain dotted identifier.
+  def validate_entry_point(entry_point) when is_binary(entry_point) do
+    if Regex.match?(~r/^[a-zA-Z0-9_.]+$/, entry_point),
+      do: :ok,
+      else: {:error, "invalid entry_point: #{inspect(entry_point)}"}
+  end
+
+  def validate_entry_point(other), do: {:error, "invalid entry_point: #{inspect(other)}"}
+
+  @doc false
+  # A source is interpolated into a newline-delimited UCM command script, so a
+  # newline anywhere inside it would inject extra commands into the session.
+  # `{:file, _}` is normalized to an absolute path, because UCM's working
+  # directory is not necessarily ours.
+  def validate_source({:share, project}) when is_binary(project) do
+    if Regex.match?(~r{^@?[A-Za-z0-9_.@/-]+$}, project),
+      do: {:ok, {:share, project}},
+      else: {:error, "invalid project: #{inspect(project)}"}
+  end
+
+  def validate_source({:file, path}) when is_binary(path) do
+    expanded = Path.expand(path)
+
+    cond do
+      String.contains?(path, "\n") ->
+        {:error, "invalid source path: #{inspect(path)}"}
+
+      Path.extname(expanded) != ".u" ->
+        {:error, "source must be a .u file, got #{expanded}"}
+
+      not File.regular?(expanded) ->
+        {:error, "source file not found: #{expanded}"}
+
+      true ->
+        {:ok, {:file, expanded}}
+    end
+  end
+
+  def validate_source(other), do: {:error, "invalid source: #{inspect(other)}"}
+
+  defp describe({:share, project}), do: project
+  defp describe({:file, path}), do: "file:#{Path.basename(path)}"
+
+  defp ingest_label({:share, project}), do: "pulling #{project}"
+  defp ingest_label({:file, path}), do: "loading #{path}"
+
+  # Stages 2 and 3. See `capture_source?/2` for why this is optional.
+  defp maybe_collect_named_term_sources(false, _ucm, _codebase, _out_dir, _set, manifest_count) do
+    Logger.info(
+      "Runtime.extract: stages 2-3 skipped — dashboard source capture is off, so the " <>
+        "#{manifest_count} manifest entries get no per-term source. The deployed Value " <>
+        "and Code bytes are unaffected."
+    )
+
+    %{sources: %{}, names: %{}}
+  end
+
+  defp maybe_collect_named_term_sources(
+         true,
+         ucm,
+         codebase_path,
+         out_dir,
+         manifest_set,
+         manifest_count
+       ) do
+    Logger.info("Runtime.extract: stage 2/3 — enumerating + resolving names")
+    t_names_start = :os.system_time(:millisecond)
+
+    result = collect_named_term_sources(ucm, codebase_path, out_dir, manifest_set)
+
+    Logger.info(
+      "Runtime.extract: stage 2-3 done in #{:os.system_time(:millisecond) - t_names_start}ms — term_sources cached: #{map_size(result.sources)} of #{manifest_count} manifest entries"
+    )
+
+    result
   end
 
   # Opens a fresh UCM session, enumerates every named term in the project's

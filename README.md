@@ -43,10 +43,32 @@ from a production one.
 State lives in `~/.local/share/unex/dev` by default; `--data PATH` moves all of
 it at once.
 
-Deploying still goes through Unison Share today. Removing that round trip from
-the edit-and-see loop is the next slice — see **[docs/local-dev.md](docs/local-dev.md)**
-for the design, the enumerated abilities a local mode has to reproduce, and why
-this is a Mix task rather than a Burrito binary.
+### Deploying a local file
+
+`mix unex.deploy` deploys a `.u` file straight from disk — no `push` to Unison
+Share, no `pull` back:
+
+```bash
+mix unex.deploy ./counter.u mainCounter --as counter
+curl -s localhost:4040/counter
+```
+
+It is an HTTP client for the same `POST /services/:name/deploy` endpoint the
+Unison `Unex.Services.deploy` ability posts to, sending the file's text in a
+`source` field instead of a `project` field. The server ingests it with `load` +
+`update` instead of `pull` and then runs *the same* extractor over *the same*
+codebase — so a local deploy mints the same root hash a Share deploy of the same
+code would, which `test/integration/deploy_local_file_test.exs` asserts against
+Share directly. `--project @kek/counter` still deploys from Share, unchanged.
+
+It also skips the deploy stages that exist only to populate the dashboard's
+`/hash/:id` page, which on this bench took a 74-second deploy down to 5. Pass
+`--capture-source` to spend the time. It needs no arguments beyond the file: the
+node's `dev.env` already has the secret.
+
+See **[docs/local-dev.md](docs/local-dev.md)** for the design, the enumerated
+abilities a local mode has to reproduce, what is deliberately *not* faithful, and
+why this is a Mix task rather than a Burrito binary.
 
 ## Dashboard
 
