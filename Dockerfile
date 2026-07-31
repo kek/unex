@@ -4,7 +4,14 @@ ARG DEBIAN_VERSION=bookworm-20260406-slim
 # UCM version pinned for both the build (compile Dispatcher.uc) and runtime
 # (run.compiled Dispatcher.uc) stages — dispatcher bytecode is tied to a
 # specific base library hash, so the two MUST match.
-ARG UCM_VERSION=1.2.0
+#
+# `.ucm-version` at the repo root is the authoritative pin. Docker cannot read a
+# file to resolve an ARG default, so the number necessarily appears here a second
+# time; scripts/assert-ucm-version.sh runs in both stages below and fails the
+# build if this default, the installed binary, or the compiled bundle disagrees
+# with the file. CI passes the value straight out of .ucm-version — see
+# .github/workflows/unex.yml. Do not edit this number on its own.
+ARG UCM_VERSION=1.3.0
 
 # Build stage
 FROM hexpm/elixir:${ELIXIR_VERSION}-erlang-${OTP_VERSION}-debian-${DEBIAN_VERSION} AS build
@@ -21,6 +28,12 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends git wget ca-certificates libstdc++6 libncurses5 && \
     rm -rf /var/lib/apt/lists/*
 
+# The authoritative pin and the guard that enforces it, copied before UCM is
+# installed so a disagreement fails the build immediately rather than after the
+# release is compiled.
+COPY .ucm-version ./.ucm-version
+COPY scripts/assert-ucm-version.sh ./scripts/assert-ucm-version.sh
+
 RUN case "${TARGETARCH}" in \
       arm64) UCM_ARCH="arm64" ;; \
       amd64) UCM_ARCH="x64" ;; \
@@ -31,7 +44,8 @@ RUN case "${TARGETARCH}" in \
     tar -xzf /tmp/ucm.tar.gz -C /usr/local/lib/ucm && \
     ln -sf /usr/local/lib/ucm/ucm /usr/local/bin/ucm && \
     rm /tmp/ucm.tar.gz && \
-    ucm version
+    ucm version && \
+    ./scripts/assert-ucm-version.sh "${UCM_VERSION}"
 
 # UCM needs a writable $HOME for its local caches during lib.install.
 ENV HOME=/root
@@ -57,6 +71,11 @@ RUN mix release
 # anything we baked into it. Keep the bundle at /app/dispatcher.uc instead.
 RUN mix unex.compile_dispatcher --out /app/dispatcher && test -s /app/dispatcher.uc
 
+# The bundle records the UCM that built it in its header, and `ucm run.compiled`
+# refuses a bundle from any other version. Assert against the artefact itself,
+# not against another copy of the number.
+RUN ./scripts/assert-ucm-version.sh --bundle /app/dispatcher.uc "${UCM_VERSION}"
+
 # Runtime stage
 FROM debian:${DEBIAN_VERSION}
 
@@ -77,6 +96,9 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Install UCM — same version as the build stage used to produce dispatcher.uc.
+COPY .ucm-version ./.ucm-version
+COPY scripts/assert-ucm-version.sh ./scripts/assert-ucm-version.sh
+
 RUN case "${TARGETARCH}" in \
       arm64) UCM_ARCH="arm64" ;; \
       amd64) UCM_ARCH="x64" ;; \
@@ -87,7 +109,8 @@ RUN case "${TARGETARCH}" in \
     tar -xzf /tmp/ucm.tar.gz -C /usr/local/lib/ucm && \
     ln -sf /usr/local/lib/ucm/ucm /usr/local/bin/ucm && \
     rm /tmp/ucm.tar.gz && \
-    ucm version
+    ucm version && \
+    ./scripts/assert-ucm-version.sh "${UCM_VERSION}"
 
 # Create app user with home directory (UCM needs writable $HOME for cache)
 RUN groupadd --system unex && useradd --system unex -g unex -m
@@ -97,6 +120,12 @@ COPY --from=build /app/_build/prod/rel/unex /app
 COPY --from=build --chown=unex:unex /app/dispatcher.uc /app/dispatcher.uc
 COPY healthcheck.sh /app/healthcheck.sh
 RUN chmod +x /app/healthcheck.sh
+
+# The invariant that actually bites in production: this stage's `ucm` is the one
+# that will `run.compiled` this bundle. If they disagree the image is broken in a
+# way that only shows up as four ten-second dispatcher accept timeouts and then
+# :dispatcher_not_started on every service call — so refuse to build it.
+RUN ./scripts/assert-ucm-version.sh --bundle /app/dispatcher.uc "${UCM_VERSION}"
 
 # Data dir — this is usually a mounted volume at runtime. Create it here so
 # the path exists if no volume is mounted.

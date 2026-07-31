@@ -13,14 +13,23 @@ jobs:
         with:
           otp-version: "27"
           elixir-version: "1.19"
+      # .ucm-version is the authoritative pin — read it rather than repeating the
+      # number here. This step used to hardcode 1.1.1 while the Dockerfile said
+      # 1.2.0 and the developer's machine ran 1.3.0, so a green CI run proved
+      # nothing about the image or about production.
+      - name: Resolve pinned UCM version
+        id: ucm
+        run: echo "version=$(tr -d '[:space:]' < .ucm-version)" >> "$GITHUB_OUTPUT"
+
       - name: Install UCM
         run: |
-          curl -fsSL "https://github.com/unisonweb/unison/releases/download/release%2F1.1.1/ucm-linux-arm64.tar.gz" -o ucm.tar.gz
+          curl -fsSL "https://github.com/unisonweb/unison/releases/download/release%2F${{ steps.ucm.outputs.version }}/ucm-linux-arm64.tar.gz" -o ucm.tar.gz
           sudo mkdir -p /usr/local/lib/ucm
           sudo tar -xzf ucm.tar.gz -C /usr/local/lib/ucm
           sudo ln -sf /usr/local/lib/ucm/ucm /usr/local/bin/ucm
           rm ucm.tar.gz
           ucm version
+          ./scripts/assert-ucm-version.sh
       - run: mix deps.get
       - run: mix test test/unex
 
@@ -32,6 +41,10 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+
+      - name: Resolve pinned UCM version
+        id: ucm
+        run: echo "version=$(tr -d '[:space:]' < .ucm-version)" >> "$GITHUB_OUTPUT"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -61,6 +74,8 @@ jobs:
           file: Dockerfile
           platforms: linux/arm64
           push: true
+          build-args: |
+            UCM_VERSION=${{ steps.ucm.outputs.version }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=registry,ref=ghcr.io/kek/unex:buildcache
