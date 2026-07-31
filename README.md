@@ -20,6 +20,34 @@ curl -s localhost:4040/health
 # {"status":"ok"}
 ```
 
+## Local development mode
+
+The quick start above works, but it leaves you to remember eight environment
+variables and to notice for yourself when `dispatcher.uc` was built by a
+different UCM than the one on your PATH. `mix unex.dev` does that part:
+
+```bash
+mix unex.dev                 # one node, API on :4040
+mix unex.dev --dashboard     # plus the dashboard on :4041
+mix unex.dev --check         # run every preflight, print the banner, don't boot
+```
+
+It sets the ordinary `UNEX_*` variables and lets `config/runtime.exs` resolve
+them exactly as a release boot does — it is the same code path, not a
+simplified copy. What it adds is local-development care: it rebuilds the
+dispatcher bundle when the local UCM cannot run it, keeps the generated
+`UNEX_SECRET` and `UNEX_CONFIG_KEY` in `<data-dir>/dev.env` so encrypted
+`Unex.Config` values survive a restart, and prints every way the node differs
+from a production one.
+
+State lives in `~/.local/share/unex/dev` by default; `--data PATH` moves all of
+it at once.
+
+Deploying still goes through Unison Share today. Removing that round trip from
+the edit-and-see loop is the next slice — see **[docs/local-dev.md](docs/local-dev.md)**
+for the design, the enumerated abilities a local mode has to reproduce, and why
+this is a Mix task rather than a Burrito binary.
+
 ## Dashboard
 
 The dashboard is an opt-in Phoenix LiveView subsystem that runs in the same

@@ -84,6 +84,12 @@ if config_env() != :test do
   config :unex,
     api_port: get_int.("UNEX_PORT", :api_port, 4040),
     api_url: get.("UNEX_API_URL", :api_url, nil),
+    # `Unex.Runtime` and `Unex.Dispatcher` read :data_dir directly, and nothing
+    # used to set it — so with UNEX_DATA pointing elsewhere, the runtime codebase
+    # and the dispatcher bundle landed next to the current working directory
+    # while Mnesia, blobs and the hash cache went where they were told. Docker
+    # only escaped it because WORKDIR=/app and UNEX_DATA=/app/data agree.
+    data_dir: data_dir,
     mnesia_dir: Path.join(data_dir, "mnesia"),
     blobs_dir: Path.join(data_dir, "blobs"),
     hash_cache_dir: Path.join(data_dir, "hashcache"),
