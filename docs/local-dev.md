@@ -106,9 +106,22 @@ curl localhost:4040/my-service
 
 `.envrc` in this repo is the honest evidence: nine exported variables that a
 developer has to know about before anything works — one of which
-(`UNEX_ADMIN_PASSWORD`) nothing in the codebase reads any more, which is what
-happens to setup that lives only in a shell file. And the inner loop for a
-one-character change goes out to the network twice and takes over a minute.
+(`UNEX_ADMIN_PASSWORD`) nothing in the codebase has ever read. It appears in no
+tracked file except this sentence: `git log --all -S UNEX_ADMIN_PASSWORD` finds
+only drafts of this paragraph. That is what happens to setup living in a file
+nobody reviews. And the inner loop for a one-character change goes out to the
+network twice and takes over a minute.
+
+An audit of those nine (plus the commented-out `UNEX_URL`) found the reverse
+problem to be the more common one: five variables the code reads that nothing
+documented — `UNEX_PROJECT`, `UNEX_API_URL`, `UNEX_DISPATCHER_POOL_SIZE`,
+`UNEX_DASHBOARD_URL` and the server-injected `UNEX_DISPATCHER_PORT`. They are in
+the README's tables now, and `test/unex/env_documentation_test.exs` fails if a
+new one appears without a row. Two more notes for anyone copying `.envrc`
+around: `UNEX_DASHBOARD_PASS=secret` is on the rejected-password list in
+`Unex.Dashboard.Credentials`, so that value cannot boot a production dashboard;
+and `UNEX_PROJECT` is only needed for a Share-pull deploy, not for
+`mix unex.deploy`.
 
 So "development mode" is not primarily about performance. It is about **two
 things**: collapsing the eight-step setup into one command, and removing the

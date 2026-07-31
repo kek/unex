@@ -155,6 +155,7 @@ Curl reference for every endpoint: **[docs/api.md](docs/api.md)**
 |----------|---------|-------------|
 | `UNEX_URL` | `http://localhost:4040` | Server URL read by `Unex.main` |
 | `UNEX_SECRET` | *(empty)* | Bearer token read by `Unex.main` |
+| `UNEX_PROJECT` | *(none)* | Unison Share project (e.g. `@you/app`), read by the `Unex.Services.deploy` handler. Needed only for a Share-pull deploy: the handler calls `bug` if it is unset. `mix unex.deploy` sends a local `.u` file and does not need it. |
 
 **Server:**
 
@@ -169,13 +170,22 @@ Curl reference for every endpoint: **[docs/api.md](docs/api.md)**
 | `UNEX_CONFIG_KEY` | *(generated)* | AES-256-GCM encryption key for Config secrets |
 | `UNEX_CONFIG` | *(none)* | Path to config file |
 | `UCM_PATH` | `ucm` | Path to UCM binary |
+| `UNEX_API_URL` | *(none)* | Externally reachable base URL of this node's HTTP API, when it differs from `http://localhost:$UNEX_PORT` |
 | `UNEX_DISPATCHER` | `<UNEX_DATA>/dispatcher.uc` | Path to the compiled dispatcher bundle (used by the long-lived dispatcher process that evaluates service calls) |
+| `UNEX_DISPATCHER_POOL_SIZE` | `4` | Number of dispatcher processes (concurrent service evaluations) |
 | `UNEX_DASHBOARD` | *(off)* | Set to `1`/`true`/`yes` to enable the Phoenix LiveView dashboard |
 | `UNEX_DASHBOARD_PORT` | `4041` | Dashboard HTTP port |
 | `UNEX_DASHBOARD_HOST` | `127.0.0.1` | Dashboard bind address; set to `0.0.0.0` to expose on all interfaces |
 | `UNEX_DASHBOARD_USER` | `admin` in dev/test, **required in prod** | Basic Auth username for the dashboard |
 | `UNEX_DASHBOARD_PASS` | `unex` in dev/test, **required in prod** | Basic Auth password for the dashboard |
 | `UNEX_DASHBOARD_SECRET` | *(generated)* | Signing key for dashboard session cookies |
+| `UNEX_DASHBOARD_URL` | *(none)* | Public dashboard URL. Sets the endpoint's `:url` and restricts `check_origin` to it; without it origin checking is off. |
+
+Every `UNEX_*` variable the code reads is listed above. `test/unex/env_documentation_test.exs`
+enforces that: it extracts the reads from `config/runtime.exs`, `lib/` and `unison/`,
+and fails if one is missing from these tables. Variables the server injects into
+its own subprocesses (`UNEX_DISPATCHER_PORT`) are listed in that test as internal
+rather than here, since an operator never sets them.
 
 Config file: `~/.config/unex/config.exs`, `/etc/unex/config.exs`, or `UNEX_CONFIG`. See `config.example.exs` for a full reference.
 
